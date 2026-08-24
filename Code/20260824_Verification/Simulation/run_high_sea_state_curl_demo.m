@@ -2,22 +2,33 @@ clear; close all; clc;
 
 cfg = default_localized_curl_config();
 
-% Keep the same random phase realization and raise only the sea condition.
+% Use a larger domain and an independent realization so that the higher
+% sea state changes the resolved wavelengths and morphology, not only Hs.
+cfg.randomSeed = 20260824;
+cfg.domain.Lx = 36.0;
+cfg.domain.Ly = 36.0;
+cfg.domain.dx = 0.06;
+cfg.domain.dy = 0.06;
 cfg.sea.U10 = 12.0;
-cfg.sea.targetHs = 0.60;
+cfg.sea.inverseWaveAge = 2.0;
+cfg.sea.windDirectionDeg = 15.0;
+cfg.sea.targetHs = 0.90;
 
-% Scale the localized geometry moderately with the larger waves while
-% retaining a low rotation angle and a long transition region.
-cfg.patch.crestLength = 3.8;
-cfg.patch.crossWaveWidth = 2.10;
-cfg.patch.transitionLength = 1.35;
-cfg.patch.crestHeight = 0.075;
+% Scale the localized geometry with the larger, younger wind waves while
+% retaining a low rotation angle and a broad transition region.
+cfg.patch.crestSearchSmoothingLength = 0.40;
+cfg.patch.crestRefineRadius = 0.50;
+cfg.patch.propagationDirectionDeg = 15.0;
+cfg.patch.crestLength = 7.0;
+cfg.patch.crossWaveWidth = 3.60;
+cfg.patch.transitionLength = 2.40;
+cfg.patch.crestHeight = 0.080;
 cfg.patch.evolutionHeight = 0.050;
-cfg.patch.evolutionLean = 0.060;
-cfg.patch.curlCenterOffset = -0.28;
+cfg.patch.evolutionLean = 0.080;
+cfg.patch.curlCenterOffset = -0.55;
 cfg.patch.maxCurlDeg = 20.0;
-cfg.patch.pivotDepth = 0.065;
-cfg.patch.forwardLean = 0.025;
+cfg.patch.pivotDepth = 0.100;
+cfg.patch.forwardLean = 0.040;
 
 cfg.output.outputDirectory = fullfile(fileparts(mfilename('fullpath')), ...
     'output', 'high_sea_state');
@@ -35,6 +46,9 @@ assert(surfaceData.metrics.maxOutsidePatchDisplacement < 1e-12, ...
 fprintf('High sea-state curled surface generated.\n');
 fprintf('  U10                      : %.2f m/s\n', cfg.sea.U10);
 fprintf('  target Hs                : %.2f m\n', cfg.sea.targetHs);
+fprintf('  inverse wave age         : %.2f\n', cfg.sea.inverseWaveAge);
+fprintf('  domain                   : %.1f x %.1f m\n', ...
+    cfg.domain.Lx, cfg.domain.Ly);
 fprintf('  detected crest elevation: %.3f m\n', ...
     surfaceData.crestDetection.z);
 fprintf('  maximum elevation change: %.3f m\n', ...

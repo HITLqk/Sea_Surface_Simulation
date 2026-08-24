@@ -9,7 +9,7 @@
 - `generate_localized_elfouhaily_curl_patch.m`: 自动搜索边界安全区域内的最高有效波峰，并在该峰顶生成配对的背景面和局部三维卷浪面。
 - `run_localized_elfouhaily_curl_demo.m`: 卷浪生成、六个独立 MATLAB figure 的可视化和 MAT 保存示例。
 - `plot_curled_sea_only.m`: 只绘制卷曲后 G1 海面并导出独立 PNG，不包含对照组、剖面线或位置标记。
-- `run_high_sea_state_curl_demo.m`: 在相同随机相位下生成 `U10=12 m/s`、`Hs=0.60 m` 的较高海况卷浪，并以两个独立 figure 输出卷曲海面和中心剖面对比。
+- `run_high_sea_state_curl_demo.m`: 在 `36 m x 36 m` 计算域内，以独立随机相位生成 `U10=12 m/s`、`Hs=0.90 m`、逆波龄 `2.0` 的较高海况卷浪，并以两个独立 figure 输出卷曲海面和中心剖面对比。
 
 ## Current Boundary
 
