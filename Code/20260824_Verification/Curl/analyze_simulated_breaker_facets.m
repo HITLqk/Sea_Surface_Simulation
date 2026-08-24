@@ -2,7 +2,11 @@ function sample = analyze_simulated_breaker_facets(surfaceData, batch)
 %ANALYZE_SIMULATED_BREAKER_FACETS Extract paired patch facet statistics.
 
 facesAll = surfaceData.faces;
-support = surfaceData.support(:);
+if isfield(surfaceData, 'coreSupport')
+    support = surfaceData.coreSupport(:);
+else
+    support = surfaceData.support(:);
+end
 facetSupport = mean(support(facesAll),2);
 selected = facetSupport >= batch.patchFacetThreshold;
 faces = facesAll(selected,:);
