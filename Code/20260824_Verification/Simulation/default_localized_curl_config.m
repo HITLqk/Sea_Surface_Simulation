@@ -20,6 +20,13 @@ cfg.sea.targetHs = 0.36;
 % direction. The compact windows make the deformation exactly zero outside
 % the finite patch.
 cfg.patch.centerXY = [6.0, 6.0];
+% By default, place the breaker on the highest resolved background crest
+% that leaves enough room for the complete compact patch. Set centerMode to
+% 'manual' to use centerXY directly.
+cfg.patch.centerMode = 'highest_crest';
+cfg.patch.crestSearchSmoothingLength = 0.20;
+cfg.patch.crestRefineRadius = 0.25;
+cfg.patch.edgeClearance = 0.15;
 cfg.patch.propagationDirectionDeg = 25.0;
 cfg.patch.crestLength = 3.2;
 cfg.patch.crossWaveWidth = 1.25;
