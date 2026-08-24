@@ -7,7 +7,8 @@
 - `Lie_Contrast.m`: 修正 Lie 变换和水平坐标压缩的非线性海面原型，来源于 `SeaClutterSimulation/Lie_Contrast.m`。
 - `default_localized_curl_config.m`: 单个局部卷浪斑块的默认参数。
 - `generate_localized_elfouhaily_curl_patch.m`: 自动搜索边界安全区域内的最高有效波峰，并在该峰顶生成配对的背景面和局部三维卷浪面。
-- `run_localized_elfouhaily_curl_demo.m`: 卷浪生成、可视化和 MAT 保存示例。
+- `run_localized_elfouhaily_curl_demo.m`: 卷浪生成、六个独立 MATLAB figure 的可视化和 MAT 保存示例。
+- `plot_curled_sea_only.m`: 只绘制卷曲后 G1 海面并导出独立 PNG，不包含对照组、剖面线或位置标记。
 
 ## Current Boundary
 
@@ -30,7 +31,7 @@ surfaceData.crestDetection    % 自动选中的背景波峰位置和高程
 
 该选项解决“卷浪几何与背景峰顶错位”，不等同于验证破碎起始判据。后续加入独立的运动学判据时，应由判据输出触发峰位置，再通过 `'manual'` 模式传入同一个局部卷曲变换。
 
-默认参数采用温和卷浪：额外峰高 `0.12 m`、最大卷曲角 `28 deg`，并使用较宽的前后过渡。需要构造不同强度组时，应逐级调整参数并保留相同背景随机种子，不应直接恢复早期 `0.42 m/62 deg` 的展示型强参数。
+默认参数采用温和卷浪：局部核心修正高度 `0.055 m`、最大卷曲角 `18 deg`，并使用 `1.20 m` 的宽过渡带。需要构造不同强度组时，应逐级调整参数并保留相同背景随机种子，不应直接恢复早期 `0.42 m/62 deg` 的展示型强参数。
 
 ## Run
 
@@ -40,5 +41,13 @@ surfaceData.crestDetection    % 自动选中的背景波峰位置和高程
 run_localized_elfouhaily_curl_demo
 ```
 
-结果默认写入本目录的 `output` 子目录。
+结果默认写入本目录的 `output` 子目录。六项可视化分别打开为独立的 MATLAB figure，并导出为 `01_...png` 至 `06_...png`，不再使用 `tiledlayout` 拼接。
+
+只生成卷曲后的独立海面图时运行：
+
+```matlab
+plot_curled_sea_only
+```
+
+输出文件为 `output/curled_sea_surface_only.png`。
 
