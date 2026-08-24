@@ -29,6 +29,8 @@ v = -sin(psi) .* (X0-xc) + cos(psi) .* (Y0-yc);
 
 halfLength = cfg.patch.crestLength / 2;
 halfWidth = cfg.patch.crossWaveWidth / 2;
+transitionLength = get_optional(cfg.patch, 'transitionLength', 0);
+halfTransitionWidth = halfWidth + transitionLength;
 
 % Mild along-crest variation creates a finite, natural-looking footprint.
 vPhase = pi * v / halfLength;
@@ -39,37 +41,51 @@ widthScale = 1 + cfg.patch.edgeIrregularity .* ...
 uRelative = u - uCenter;
 
 wv = compact_cosine(v / halfLength);
-wu = compact_cosine(uRelative ./ (halfWidth .* widthScale));
-support = wu .* wv;
+wuCore = compact_cosine(uRelative ./ (halfWidth .* widthScale));
+wuTransition = compact_cosine(uRelative ./ ...
+    (halfTransitionWidth .* widthScale));
+coreSupport = wuCore .* wv;
+support = wuTransition .* wv;
 
-% The asymmetric crest is narrow on the forward face and broader behind it.
-sigmaRear = 0.52 * halfWidth;
-sigmaFront = 0.30 * halfWidth;
+% A low, asymmetric crest correction follows the resolved wave instead of
+% creating a separate tall bump.
+sigmaRear = 0.95 * halfWidth;
+sigmaFront = 0.75 * halfWidth;
 sigmaU = sigmaRear .* ones(size(uRelative));
 sigmaU(uRelative >= 0) = sigmaFront;
 crestProfile = exp(-0.5 * (uRelative ./ sigmaU).^2);
 crestEnvelope = cfg.patch.crestHeight .* crestProfile .* support;
-Zpre = Z0 + crestEnvelope;
 
-% Rotate the local upper surface around an along-crest axis. Both the angle
-% and final displacement vanish at the compact support boundary.
-% Centre the maximum curl angle on the detected background crest. The
-% forwardLean parameter moves the rotation pivot, not the trigger location.
-curlCore = exp(-0.5 * (uRelative / (0.34*halfWidth)).^2) .* wv;
+% The broad evolution band starts changing the non-curled shoulder before
+% the rotation core and returns continuously to the paired background.
+evolutionSigma = max(0.72*halfTransitionWidth, eps);
+evolutionProfile = exp(-0.5 * (uRelative/evolutionSigma).^2);
+evolutionEnvelope = get_optional(cfg.patch, 'evolutionHeight', 0) .* ...
+    evolutionProfile .* support;
+Zpre = Z0 + crestEnvelope + evolutionEnvelope;
+uPre = u + get_optional(cfg.patch, 'evolutionLean', 0) .* ...
+    evolutionProfile .* support;
+
+% Start rotating on the approaching shoulder, shortly before the detected
+% crest. The long support band blends the rotated core into the evolving
+% but non-curled neighbouring surface.
+curlCenterOffset = get_optional(cfg.patch, 'curlCenterOffset', 0);
+curlCore = exp(-0.5 * ((uRelative-curlCenterOffset) / ...
+    (0.62*halfWidth)).^2) .* wv;
 theta = deg2rad(cfg.patch.maxCurlDeg) .* curlCore;
-uPivot = uCenter + cfg.patch.forwardLean;
+uPivot = uCenter + curlCenterOffset + cfg.patch.forwardLean;
 zPivot = Z0 - cfg.patch.pivotDepth;
-du = u - uPivot;
+du = uPre - uPivot;
 dz = Zpre - zPivot;
 uRot = uPivot + du .* cos(theta) + dz .* sin(theta);
 zRot = zPivot - du .* sin(theta) + dz .* cos(theta);
 
-uFinal = u + support .* (uRot-u);
+uFinal = uPre + support .* (uRot-uPre);
 Z = Zpre + support .* (zRot-Zpre);
 X = xc + cos(psi).*uFinal - sin(psi).*v;
 Y = yc + sin(psi).*uFinal + cos(psi).*v;
 
-breakingMask = support >= cfg.patch.maskThreshold;
+breakingMask = coreSupport >= cfg.patch.maskThreshold;
 faces = structured_triangles(Nx, Ny);
 facetMask = any(reshape(breakingMask(faces), size(faces)), 2);
 
@@ -87,6 +103,7 @@ surfaceData.Y = Y;
 surfaceData.Z = Z;
 surfaceData.breakingMask = breakingMask;
 surfaceData.support = support;
+surfaceData.coreSupport = coreSupport;
 surfaceData.localU = u;
 surfaceData.localV = v;
 surfaceData.localUFinal = uFinal;
@@ -100,6 +117,9 @@ resolvedCfg.patch.centerXY = [xc, yc];
 surfaceData.cfg = resolvedCfg;
 surfaceData.requestedCfg = cfg;
 surfaceData.crestDetection = crestDetection;
+surfaceData.curlCenterOffset = curlCenterOffset;
+surfaceData.curlCenterXY = [xc + cos(psi)*curlCenterOffset, ...
+    yc + sin(psi)*curlCenterOffset];
 surfaceData.metrics.projectedFootprintArea = nnz(breakingMask) * ...
     (cfg.domain.Lx/Nx) * (cfg.domain.Ly/Ny);
 surfaceData.metrics.baselinePatchSurfaceArea = baselineArea;
@@ -109,7 +129,8 @@ surfaceData.metrics.maxElevationIncrement = max(Z(:)-Z0(:));
 surfaceData.metrics.maxHorizontalDisplacement = max(hypot(X(:)-X0(:), Y(:)-Y0(:)));
 surfaceData.metrics.breakerCenterToCrestDistance = hypot( ...
     xc-crestDetection.x, yc-crestDetection.y);
-[~, maximumCurlIndex] = max(theta(:));
+effectiveCurl = theta .* support;
+[~, maximumCurlIndex] = max(effectiveCurl(:));
 surfaceData.metrics.maxCurlToCrestDistance = hypot( ...
     X0(maximumCurlIndex)-crestDetection.x, ...
     Y0(maximumCurlIndex)-crestDetection.y);
@@ -137,8 +158,9 @@ assert(strcmp(mode, 'highest_crest'), ...
 
 dx = cfg.domain.Lx / size(X,2);
 dy = cfg.domain.Ly / size(X,1);
-patchRadius = 0.5 * hypot(cfg.patch.crestLength, ...
-    cfg.patch.crossWaveWidth);
+transitionLength = get_optional(cfg.patch, 'transitionLength', 0);
+effectiveWidth = cfg.patch.crossWaveWidth + 2*transitionLength;
+patchRadius = 0.5 * hypot(cfg.patch.crestLength, effectiveWidth);
 extraClearance = get_optional(cfg.patch, 'edgeClearance', 0);
 clearance = patchRadius + extraClearance + 2*max(dx,dy);
 valid = X >= clearance & X <= cfg.domain.Lx-clearance & ...
