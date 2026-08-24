@@ -6,7 +6,7 @@
 
 - `Lie_Contrast.m`: 修正 Lie 变换和水平坐标压缩的非线性海面原型，来源于 `SeaClutterSimulation/Lie_Contrast.m`。
 - `default_localized_curl_config.m`: 单个局部卷浪斑块的默认参数。
-- `generate_localized_elfouhaily_curl_patch.m`: 生成配对的背景面和局部三维卷浪面，共用顶点索引和三角面连接关系。
+- `generate_localized_elfouhaily_curl_patch.m`: 自动搜索边界安全区域内的最高有效波峰，并在该峰顶生成配对的背景面和局部三维卷浪面。
 - `run_localized_elfouhaily_curl_demo.m`: 卷浪生成、可视化和 MAT 保存示例。
 
 ## Current Boundary
@@ -21,7 +21,12 @@ surfaceData.vertices          % 卷曲后顶点
 surfaceData.faces             % 两组共享的三角面连接
 surfaceData.breakingMask      % 卷浪顶点掩膜
 surfaceData.breakingFacetMask % 卷浪面元掩膜
+surfaceData.crestDetection    % 自动选中的背景波峰位置和高程
 ```
+
+默认 `cfg.patch.centerMode='highest_crest'`。搜索先对背景面轻度平滑以定位主波峰，再在附近原始网格上细化到真实最高点，同时排除无法完整容纳卷浪斑块的边界区域。设置为 `'manual'` 时才使用 `cfg.patch.centerXY`。
+
+该选项解决“卷浪几何与背景峰顶错位”，不等同于验证破碎起始判据。后续加入独立的运动学判据时，应由判据输出触发峰位置，再通过 `'manual'` 模式传入同一个局部卷曲变换。
 
 ## Run
 
