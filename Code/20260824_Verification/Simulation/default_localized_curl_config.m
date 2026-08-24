@@ -29,17 +29,22 @@ cfg.patch.crestRefineRadius = 0.25;
 cfg.patch.edgeClearance = 0.15;
 cfg.patch.propagationDirectionDeg = 25.0;
 cfg.patch.crestLength = 3.2;
-cfg.patch.crossWaveWidth = 1.25;
-cfg.patch.crestHeight = 0.42;
-cfg.patch.maxCurlDeg = 62.0;
-cfg.patch.pivotDepth = 0.24;
-cfg.patch.forwardLean = 0.10;
-cfg.patch.maskThreshold = 0.12;
+cfg.patch.crossWaveWidth = 1.80;
+cfg.patch.transitionLength = 1.20;
+cfg.patch.crestHeight = 0.055;
+cfg.patch.evolutionHeight = 0.035;
+cfg.patch.evolutionLean = 0.045;
+% Negative u is the approaching shoulder before the detected crest.
+cfg.patch.curlCenterOffset = -0.22;
+cfg.patch.maxCurlDeg = 18.0;
+cfg.patch.pivotDepth = 0.05;
+cfg.patch.forwardLean = 0.020;
+cfg.patch.maskThreshold = 0.08;
 
 % A small deterministic modulation avoids an unrealistically perfect oval
 % while preserving reproducibility and a single connected breaking patch.
-cfg.patch.edgeIrregularity = 0.12;
-cfg.patch.centerlineMeander = 0.08;
+cfg.patch.edgeIrregularity = 0.06;
+cfg.patch.centerlineMeander = 0.04;
 
 cfg.output.saveMat = true;
 cfg.output.saveFigure = true;
