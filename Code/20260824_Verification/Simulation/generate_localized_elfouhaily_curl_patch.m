@@ -21,8 +21,9 @@ Z0 = synthesize_elfouhaily_surface(Nx, Ny, cfg.domain.Lx, ...
     cfg.domain.Ly, cfg.sea);
 
 psi = deg2rad(cfg.patch.propagationDirectionDeg);
-xc = cfg.patch.centerXY(1);
-yc = cfg.patch.centerXY(2);
+crestDetection = locate_breaking_crest(X0, Y0, Z0, cfg);
+xc = crestDetection.x;
+yc = crestDetection.y;
 u =  cos(psi) .* (X0-xc) + sin(psi) .* (Y0-yc);
 v = -sin(psi) .* (X0-xc) + cos(psi) .* (Y0-yc);
 
@@ -52,8 +53,9 @@ Zpre = Z0 + crestEnvelope;
 
 % Rotate the local upper surface around an along-crest axis. Both the angle
 % and final displacement vanish at the compact support boundary.
-curlCore = exp(-0.5 * ((uRelative - 0.08*halfWidth) / ...
-    (0.34*halfWidth)).^2) .* wv;
+% Centre the maximum curl angle on the detected background crest. The
+% forwardLean parameter moves the rotation pivot, not the trigger location.
+curlCore = exp(-0.5 * (uRelative / (0.34*halfWidth)).^2) .* wv;
 theta = deg2rad(cfg.patch.maxCurlDeg) .* curlCore;
 uPivot = uCenter + cfg.patch.forwardLean;
 zPivot = Z0 - cfg.patch.pivotDepth;
@@ -93,7 +95,11 @@ surfaceData.breakingFacetMask = facetMask;
 surfaceData.verticesBaseline = baselineVertices;
 surfaceData.vertices = vertices;
 surfaceData.eventId = ones(size(X), 'uint8') .* uint8(breakingMask);
-surfaceData.cfg = cfg;
+resolvedCfg = cfg;
+resolvedCfg.patch.centerXY = [xc, yc];
+surfaceData.cfg = resolvedCfg;
+surfaceData.requestedCfg = cfg;
+surfaceData.crestDetection = crestDetection;
 surfaceData.metrics.projectedFootprintArea = nnz(breakingMask) * ...
     (cfg.domain.Lx/Nx) * (cfg.domain.Ly/Ny);
 surfaceData.metrics.baselinePatchSurfaceArea = baselineArea;
@@ -101,10 +107,95 @@ surfaceData.metrics.curledPatchSurfaceArea = curledArea;
 surfaceData.metrics.surfaceAreaRatio = curledArea / baselineArea;
 surfaceData.metrics.maxElevationIncrement = max(Z(:)-Z0(:));
 surfaceData.metrics.maxHorizontalDisplacement = max(hypot(X(:)-X0(:), Y(:)-Y0(:)));
+surfaceData.metrics.breakerCenterToCrestDistance = hypot( ...
+    xc-crestDetection.x, yc-crestDetection.y);
+[~, maximumCurlIndex] = max(theta(:));
+surfaceData.metrics.maxCurlToCrestDistance = hypot( ...
+    X0(maximumCurlIndex)-crestDetection.x, ...
+    Y0(maximumCurlIndex)-crestDetection.y);
 outside = support == 0;
 surfaceData.metrics.maxOutsidePatchDisplacement = max([ ...
     abs(X(outside)-X0(outside)); abs(Y(outside)-Y0(outside)); ...
     abs(Z(outside)-Z0(outside))]);
+end
+
+function detection = locate_breaking_crest(X, Y, Z, cfg)
+% Locate a resolved crest while keeping the complete breaking patch inside.
+mode = 'manual';
+if isfield(cfg.patch, 'centerMode') && ~isempty(cfg.patch.centerMode)
+    mode = lower(char(cfg.patch.centerMode));
+end
+
+if strcmp(mode, 'manual')
+    [~, index] = min((X(:)-cfg.patch.centerXY(1)).^2 + ...
+        (Y(:)-cfg.patch.centerXY(2)).^2);
+    detection = make_detection(index, X, Y, Z, Z, mode, 0);
+    return;
+end
+assert(strcmp(mode, 'highest_crest'), ...
+    'Unknown patch centerMode: %s.', cfg.patch.centerMode);
+
+dx = cfg.domain.Lx / size(X,2);
+dy = cfg.domain.Ly / size(X,1);
+patchRadius = 0.5 * hypot(cfg.patch.crestLength, ...
+    cfg.patch.crossWaveWidth);
+extraClearance = get_optional(cfg.patch, 'edgeClearance', 0);
+clearance = patchRadius + extraClearance + 2*max(dx,dy);
+valid = X >= clearance & X <= cfg.domain.Lx-clearance & ...
+    Y >= clearance & Y <= cfg.domain.Ly-clearance;
+assert(any(valid, 'all'), ...
+    'The domain is too small to place the complete breaking patch.');
+
+smoothLength = get_optional(cfg.patch, ...
+    'crestSearchSmoothingLength', 0);
+sigmaCells = smoothLength / max(0.5*(dx+dy), eps);
+Zscore = gaussian_smooth(Z, sigmaCells);
+score = Zscore;
+score(~valid) = -Inf;
+[~, coarseIndex] = max(score(:));
+
+refineRadius = get_optional(cfg.patch, 'crestRefineRadius', 0);
+if refineRadius > 0
+    refine = valid & hypot(X-X(coarseIndex), Y-Y(coarseIndex)) <= refineRadius;
+    candidates = find(refine);
+    [~, localIndex] = max(Z(candidates));
+    index = candidates(localIndex);
+else
+    index = coarseIndex;
+end
+detection = make_detection(index, X, Y, Z, Zscore, mode, clearance);
+detection.coarseIndex = coarseIndex;
+detection.coarseXY = [X(coarseIndex), Y(coarseIndex)];
+end
+
+function detection = make_detection(index, X, Y, Z, Zscore, mode, clearance)
+detection.mode = mode;
+detection.linearIndex = index;
+detection.x = X(index);
+detection.y = Y(index);
+detection.z = Z(index);
+detection.smoothedElevation = Zscore(index);
+detection.edgeClearance = clearance;
+end
+
+function value = get_optional(s, name, fallback)
+if isfield(s, name) && ~isempty(s.(name))
+    value = s.(name);
+else
+    value = fallback;
+end
+end
+
+function Zs = gaussian_smooth(Z, sigmaCells)
+if sigmaCells <= 0
+    Zs = Z;
+    return;
+end
+radius = max(1, ceil(3*sigmaCells));
+q = -radius:radius;
+kernel = exp(-0.5*(q/sigmaCells).^2);
+kernel = kernel / sum(kernel);
+Zs = conv2(kernel, kernel, Z, 'same');
 end
 
 function Z = synthesize_elfouhaily_surface(Nx, Ny, Lx, Ly, sea)
