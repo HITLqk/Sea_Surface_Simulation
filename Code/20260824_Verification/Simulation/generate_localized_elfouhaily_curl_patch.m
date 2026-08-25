@@ -86,6 +86,11 @@ X = xc + cos(psi).*uFinal - sin(psi).*v;
 Y = yc + sin(psi).*uFinal + cos(psi).*v;
 
 breakingMask = coreSupport >= cfg.patch.maskThreshold;
+[duFinalDx, duFinalDy] = gradient(uFinal, ...
+    cfg.domain.Lx/Nx, cfg.domain.Ly/Ny);
+localPropagationJacobian = cos(psi).*duFinalDx + ...
+    sin(psi).*duFinalDy;
+overturningMask = breakingMask & localPropagationJacobian < 0;
 faces = structured_triangles(Nx, Ny);
 facetMask = any(reshape(breakingMask(faces), size(faces)), 2);
 
@@ -102,6 +107,8 @@ surfaceData.X = X;
 surfaceData.Y = Y;
 surfaceData.Z = Z;
 surfaceData.breakingMask = breakingMask;
+surfaceData.overturningMask = overturningMask;
+surfaceData.localPropagationJacobian = localPropagationJacobian;
 surfaceData.support = support;
 surfaceData.coreSupport = coreSupport;
 surfaceData.localU = u;
@@ -134,6 +141,11 @@ effectiveCurl = theta .* support;
 surfaceData.metrics.maxCurlToCrestDistance = hypot( ...
     X0(maximumCurlIndex)-crestDetection.x, ...
     Y0(maximumCurlIndex)-crestDetection.y);
+surfaceData.metrics.minimumLocalPropagationJacobian = min( ...
+    localPropagationJacobian(breakingMask));
+surfaceData.metrics.overturningPointCount = nnz(overturningMask);
+surfaceData.metrics.overturningProjectedArea = nnz(overturningMask) * ...
+    (cfg.domain.Lx/Nx) * (cfg.domain.Ly/Ny);
 outside = support == 0;
 surfaceData.metrics.maxOutsidePatchDisplacement = max([ ...
     abs(X(outside)-X0(outside)); abs(Y(outside)-Y0(outside)); ...
