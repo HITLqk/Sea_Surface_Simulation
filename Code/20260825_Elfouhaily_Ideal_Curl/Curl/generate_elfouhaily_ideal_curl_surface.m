@@ -24,16 +24,21 @@ psi = deg2rad(cfg.curl.propagationDirectionDeg);
 u = cos(psi).*(X0-detection.x) + sin(psi).*(Y0-detection.y);
 v = -sin(psi).*(X0-detection.x) + cos(psi).*(Y0-detection.y);
 
-% Original ideal-curl operation in a local coordinate system.
+% Forward-plunging ideal-curl operation in a local coordinate system. The
+% horizontal rotation keeps the full curl angle, while the vertical branch
+% uses a smaller angle so that the lip first advances along +u and only
+% then turns mildly downward.
 zPivot = detection.z-cfg.curl.pivotDepth;
 nU = cfg.curl.scaleU.*u;
 nZ = cfg.curl.scaleZ.*(Z0-zPivot);
 curlRate = exp(-abs(nU)/cfg.curl.amplitudeCurl);
 crestWeight = compact_cosine(v/(0.5*cfg.curl.crestLength));
 thetaCurl = cfg.curl.curlMultiplier.*curlRate.*crestWeight;
+thetaVertical = cfg.curl.verticalAngleRatio.*thetaCurl;
 
-rotU = nU.*cos(thetaCurl) + nZ.*sin(thetaCurl);
-rotZ = -nU.*sin(thetaCurl) + nZ.*cos(thetaCurl);
+rotU = nU.*cos(thetaCurl) + ...
+    cfg.curl.forwardGain.*nZ.*sin(thetaCurl);
+rotZ = -nU.*sin(thetaVertical) + nZ.*cos(thetaVertical);
 
 uFinal = rotU;
 Z = zPivot+rotZ;
@@ -62,6 +67,7 @@ surfaceData.localU = u;
 surfaceData.localV = v;
 surfaceData.localUFinal = uFinal;
 surfaceData.thetaCurl = thetaCurl;
+surfaceData.thetaVertical = thetaVertical;
 surfaceData.crestWeight = crestWeight;
 surfaceData.curlMask = curlMask;
 surfaceData.propagationJacobian = propagationJacobian;
@@ -75,6 +81,11 @@ surfaceData.cfg = cfg;
 surfaceData.metrics.maxElevationChange = max(abs(Z(:)-Z0(:)));
 surfaceData.metrics.maxHorizontalDisplacement = max(hypot( ...
     X(:)-X0(:),Y(:)-Y0(:)));
+propagationDisplacement = uFinal-u;
+surfaceData.metrics.maxForwardDisplacement = max( ...
+    propagationDisplacement(curlMask));
+surfaceData.metrics.maxDownwardDisplacement = max( ...
+    Z0(curlMask)-Z(curlMask));
 surfaceData.metrics.curlPointCount = nnz(curlMask);
 surfaceData.metrics.curlProjectedArea = nnz(curlMask)* ...
     (cfg.domain.Lx/Nx)*(cfg.domain.Ly/Ny);

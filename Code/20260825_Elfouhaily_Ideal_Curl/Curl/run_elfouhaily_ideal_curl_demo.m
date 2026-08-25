@@ -1,6 +1,13 @@
 clear; close all; clc;
 
 cfg = default_elfouhaily_ideal_curl_config();
+
+% A plunging crest advances along +u before it turns downward. These
+% overrides make that forward component dominant in this demonstration.
+cfg.curl.forwardGain = 1.15;
+cfg.curl.verticalAngleRatio = 0.28;
+cfg.curl.pivotDepth = 0.95;
+cfg.curl.curlMultiplier = 0.55;
 surfaceData = generate_elfouhaily_ideal_curl_surface(cfg);
 assert(surfaceData.metrics.overturningPointCount > 0, ...
     'The selected crest is deformed but does not geometrically curl.');
@@ -8,6 +15,9 @@ assert(surfaceData.metrics.maxOutsideCrestDisplacement < 1e-12, ...
     'The curl deformation leaks outside the finite crest window.');
 assert(surfaceData.metrics.crestwiseBackgroundStd > 0, ...
     'The curled patch has collapsed to a crestwise-constant extrusion.');
+assert(surfaceData.metrics.maxForwardDisplacement > ...
+    surfaceData.metrics.maxDownwardDisplacement, ...
+    'The curl is downward-dominant instead of forward-plunging.');
 
 if ~exist(cfg.output.outputDirectory,'dir')
     mkdir(cfg.output.outputDirectory);
@@ -27,6 +37,10 @@ fprintf('  minimum du_final/du      : %.4f\n', ...
     surfaceData.metrics.minimumPropagationJacobian);
 fprintf('  overturning points       : %d\n', ...
     surfaceData.metrics.overturningPointCount);
+fprintf('  maximum forward movement : %.4f m\n', ...
+    surfaceData.metrics.maxForwardDisplacement);
+fprintf('  maximum downward movement: %.4f m\n', ...
+    surfaceData.metrics.maxDownwardDisplacement);
 fprintf('  crestwise background std : %.5f m\n', ...
     surfaceData.metrics.crestwiseBackgroundStd);
 fprintf('  outside-window movement  : %.3e m\n', ...
@@ -63,11 +77,11 @@ figSection = new_figure(cfg.output.figureVisible,[140 140 920 620]);
 plot(uBase,zBase(order),'Color',[0.25 0.25 0.25], ...
     'LineWidth',1.2); hold on;
 plot(uCurl(order),zCurl(order),'r-','LineWidth',1.9);
-xlim([-1.4 1.4]); grid on;
+xlim([-1.4 1.8]); grid on;
 xlabel('Propagation coordinate u (m)'); ylabel('z (m)');
 legend('Elfouhaily background','Ideal-curled surface', ...
     'Location','best');
-title('Height-selected Crest Section');
+title('Forward-plunging Height-selected Crest Section');
 
 figCloseup = new_figure(cfg.output.figureVisible,[170 170 1040 720]);
 surf(surfaceData.X,surfaceData.Y,surfaceData.Z, ...
