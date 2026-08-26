@@ -9,7 +9,7 @@
     run_four_group_original_style_validation();
 ```
 
-默认使用 `U10=1:20 m/s`、逆波龄 `0.84`、每个风速 3 个配对随机种子。四组分别为 `Linear`、`G0_Nonlinear`、`G1_Upward` 和 `G1_Background`，所有 MSS 都从实际 `(X,Y,Z)` 三角面元法向量计算。输出目录为 `output_four_group_original_style`。
+默认使用 `U10=1:10 m/s`、逆波龄 `0.84`、每个风速 3 个配对随机种子。四组分别为 `Linear`、`G0_Nonlinear`、`G1_Upward` 和 `G1_Background`，所有 MSS 都从实际 `(X,Y,Z)` 三角面元法向量计算。`128 m` 区域不能容纳更高风速下的谱峰，验证程序会拒绝未解析的风速设置。输出目录为 `output_four_group_original_style`。
 
 3 个种子用于形成可运行的初步曲线；论文定稿统计应将 `cfg.randomSeeds` 扩展到至少 20 个种子。
 
@@ -50,8 +50,6 @@ U12 = 1.6 .* U10.^0.8;
 ```
 
 当前目录补入了兼容函数 `U10_U12.m`，以准确复现原图。这个幂律只能用于追溯旧图，不能未经文献依据就作为新实验中的标准大气风速高度换算。
-
-Git 副本同时保留了原程序所用 `Elfouhaily.m` 的等价本地实现，因此可以独立运行。若需核对另一份源代码，可用 `SourceDirectory` 显式指定目录。
 
 ## 2. 对原代码的审计结论
 

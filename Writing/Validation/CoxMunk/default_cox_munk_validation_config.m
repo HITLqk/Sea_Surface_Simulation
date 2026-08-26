@@ -24,6 +24,8 @@ cfg.domain.dx = 0.25;
 cfg.domain.dy = 0.25;
 cfg.numerics.nativeGridSpacing = 0.25;
 cfg.numerics.enforceNativeGrid = true;
+cfg.numerics.minimumPeakWaves = 1.0;
+cfg.numerics.enforcePeakResolution = true;
 cfg.sea.inverseWaveAge = 0.84;
 cfg.sea.windDirectionDeg = 0.0;
 

@@ -10,7 +10,7 @@ arguments
 end
 
 if isequal(cfg.windSpeeds,[3 5 7 10])
-    cfg.windSpeeds = 1:20;
+    cfg.windSpeeds = 1:10;
 end
 if isequal(cfg.randomSeeds,20260801:20260820)
     cfg.randomSeeds = 20260825:20260827;
@@ -90,8 +90,14 @@ plot(ax,reference.U10,reference.MssTotalLower,'--', ...
     'Color',[0.494 0.184 0.556],'LineWidth',2, ...
     'DisplayName','Cox-Munk lower bound');
 
-xlim(ax,[0 20]);
-xticks(ax,0:5:20);
+xMaximum = max(reference.U10);
+xlim(ax,[0 xMaximum]);
+if xMaximum <= 10
+    tickStep = 2;
+else
+    tickStep = 5;
+end
+xticks(ax,0:tickStep:xMaximum);
 yMaximum = max([summary.MssTotalMean;reference.MssTotalUpper]);
 ylim(ax,[0,1.05*yMaximum]);
 xlabel(ax,'Wind Speed(m/s)','FontName','Times New Roman','FontSize',12);

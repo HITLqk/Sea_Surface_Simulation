@@ -24,6 +24,22 @@ if cfg.numerics.enforceNativeGrid
         cfg.numerics.nativeGridSpacing);
 end
 
+if cfg.numerics.enforcePeakResolution
+    peakWavelengths = 2*pi*cfg.windSpeeds.^2/ ...
+        (9.81*cfg.sea.inverseWaveAge^2);
+    availableLength = min(cfg.domain.Lx,cfg.domain.Ly);
+    requiredLength = cfg.numerics.minimumPeakWaves*peakWavelengths;
+    unresolvedIndex = find(requiredLength > availableLength,1,'last');
+    if ~isempty(unresolvedIndex)
+        error(['The domain does not resolve the spectral peak for every ', ...
+            'wind speed. U10 %.1f m/s has a peak wavelength of %.1f m, ', ...
+            'but the available domain length is %.1f m. Reduce the wind ', ...
+            'range or enlarge the domain.'], ...
+            cfg.windSpeeds(unresolvedIndex), ...
+            peakWavelengths(unresolvedIndex),availableLength);
+    end
+end
+
 if ~exist(cfg.output.directory,'dir')
     mkdir(cfg.output.directory);
 end

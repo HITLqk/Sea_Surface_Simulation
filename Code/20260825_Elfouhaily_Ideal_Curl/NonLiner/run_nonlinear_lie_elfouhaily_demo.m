@@ -91,8 +91,8 @@ if cfg.output.saveSurfaceMat
         'X','Y','Z','XLinear','YLinear','ZLinear','metrics','cfg','-v7.3');
 end
 
-function fig = new_figure(visibility,position)
-fig = figure('Visible',visibility,'Color','w','Position',position);
+function fig = new_figure(visibility,~)
+fig = figure('Visible',visibility);
 set(gca,'Color','w','FontName','Times New Roman','FontSize',12, ...
     'LineWidth',0.8,'Layer','top');
 end

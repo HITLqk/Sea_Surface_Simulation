@@ -39,8 +39,18 @@ etaLinear = synthesize_real_surface(Psi,dkx,dky,Nx,Ny);
 etaLinear = etaLinear-mean(etaLinear,'all');
 
 nyquistRadius = min(pi/dx,pi/dy);
-cutoff = cfg.lie.cutoffFraction*nyquistRadius;
-antiAlias = exp(-(K/max(cutoff,eps)).^cfg.lie.filterOrder);
+assert(cfg.lie.nonlinearOutputCutoff <= 0.98*nyquistRadius, ...
+    ['The fixed nonlinear output cutoff %.3f rad/m is not resolved by ', ...
+    'the current grid (Nyquist %.3f rad/m). Reduce dx/dy.'], ...
+    cfg.lie.nonlinearOutputCutoff,nyquistRadius);
+inputPass = (1-cfg.lie.filterTransitionFraction)* ...
+    cfg.lie.nonlinearInputCutoff;
+outputPass = (1-cfg.lie.filterTransitionFraction)* ...
+    cfg.lie.nonlinearOutputCutoff;
+inputFilter = smooth_radial_lowpass( ...
+    K,inputPass,cfg.lie.nonlinearInputCutoff);
+outputFilter = smooth_radial_lowpass( ...
+    K,outputPass,cfg.lie.nonlinearOutputCutoff);
 
 psiWind = deg2rad(cfg.sea.windDirectionDeg);
 windProjection = abs((KX*cos(psiWind)+KY*sin(psiWind))./Ksafe);
@@ -54,8 +64,12 @@ windGain = cfg.lie.baseGain* ...
 windGain = min(max(windGain,cfg.lie.minimumWindGain), ...
     cfg.lie.maximumWindGain);
 
-etaSquared = etaLinear.^2-mean(etaLinear.^2,'all');
-etaSecondHat = 0.5*K.*directionWeight.*antiAlias.*fft2(etaSquared);
+etaLinearHat = fft2(etaLinear);
+etaForNonlinear = real(ifft2(etaLinearHat.*inputFilter));
+etaSquaredHat = dealiased_square_hat( ...
+    etaForNonlinear,cfg.lie.dealiasExpansion);
+etaSquaredHat(1,1) = 0;
+etaSecondHat = 0.5*K.*directionWeight.*outputFilter.*etaSquaredHat;
 etaSecond = real(ifft2(etaSecondHat));
 etaSecond = etaSecond-mean(etaSecond,'all');
 etaNonlinear = etaLinear+windGain*etaSecond;
@@ -63,9 +77,8 @@ etaNonlinear = etaNonlinear-mean(etaNonlinear,'all');
 
 % Riesz displacement gives the Lie variables a horizontal component. A
 % line search prevents local folding of the x-y parameterization.
-etaLinearHat = fft2(etaLinear);
-Dx = real(ifft2(-1i*(KX./Ksafe).*etaLinearHat.*antiAlias));
-Dy = real(ifft2(-1i*(KY./Ksafe).*etaLinearHat.*antiAlias));
+Dx = real(ifft2(-1i*(KX./Ksafe).*etaLinearHat.*inputFilter));
+Dy = real(ifft2(-1i*(KY./Ksafe).*etaLinearHat.*inputFilter));
 
 lambda = cfg.lie.horizontalDisplacement*windGain;
 [lambda,minJacobian,backoffSteps] = stable_horizontal_gain( ...
@@ -94,7 +107,43 @@ surfaceData.K = K;
 surfaceData.spectrumMeta = spectrumMeta;
 surfaceData.metrics = metrics;
 surfaceData.metrics.horizontalBackoffSteps = backoffSteps;
+surfaceData.metrics.nonlinearInputCutoff = ...
+    cfg.lie.nonlinearInputCutoff;
+surfaceData.metrics.nonlinearOutputCutoff = ...
+    cfg.lie.nonlinearOutputCutoff;
 surfaceData.cfg = cfg;
+end
+
+function response = smooth_radial_lowpass(K,passWavenumber,stopWavenumber)
+assert(passWavenumber >= 0 && stopWavenumber > passWavenumber, ...
+    'Low-pass stop wavenumber must exceed its pass wavenumber.');
+response = ones(size(K));
+response(K >= stopWavenumber) = 0;
+transition = K > passWavenumber & K < stopWavenumber;
+q = (K(transition)-passWavenumber)/ ...
+    (stopWavenumber-passWavenumber);
+response(transition) = 0.5*(1+cos(pi*q));
+end
+
+function productHat = dealiased_square_hat(field,expansion)
+% Compute field.^2 on an expanded Fourier grid, then crop spectrally.
+[Ny,Nx] = size(field);
+paddedNy = 2*ceil(expansion*Ny/2);
+paddedNx = 2*ceil(expansion*Nx/2);
+
+fieldHat = fftshift(fft2(field));
+paddedHat = complex(zeros(paddedNy,paddedNx));
+rowStart = (paddedNy-Ny)/2+1;
+columnStart = (paddedNx-Nx)/2+1;
+rows = rowStart:rowStart+Ny-1;
+columns = columnStart:columnStart+Nx-1;
+paddedHat(rows,columns) = fieldHat;
+
+paddingScale = (paddedNy*paddedNx)/(Ny*Nx);
+paddedField = real(ifft2(ifftshift(paddedHat)))*paddingScale;
+paddedProductHat = fftshift(fft2(paddedField.^2));
+cropped = paddedProductHat(rows,columns)/paddingScale;
+productHat = ifftshift(cropped);
 end
 
 function [Psi,meta] = elfouhaily_directional_spectrum(K,KX,KY,sea)
@@ -216,6 +265,12 @@ assert(cfg.domain.Lx > 0 && cfg.domain.Ly > 0, ...
 assert(cfg.lie.directionStrength >= 0 && ...
     cfg.lie.directionStrength <= 1, ...
     'directionStrength must lie in [0,1].');
-assert(cfg.lie.cutoffFraction > 0 && cfg.lie.cutoffFraction < 1, ...
-    'cutoffFraction must lie in (0,1).');
+assert(cfg.lie.nonlinearInputCutoff > 0 && ...
+    cfg.lie.nonlinearOutputCutoff >= cfg.lie.nonlinearInputCutoff, ...
+    'The fixed nonlinear wavenumber cutoffs are invalid.');
+assert(cfg.lie.filterTransitionFraction > 0 && ...
+    cfg.lie.filterTransitionFraction < 1, ...
+    'filterTransitionFraction must lie in (0,1).');
+assert(cfg.lie.dealiasExpansion >= 1.5, ...
+    'Quadratic de-aliasing requires an expansion of at least 1.5.');
 end

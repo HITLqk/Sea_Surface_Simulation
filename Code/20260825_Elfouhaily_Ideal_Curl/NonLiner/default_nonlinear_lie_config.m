@@ -12,17 +12,24 @@ cfg.sea.U10 = 10.0;
 cfg.sea.inverseWaveAge = 0.84;
 cfg.sea.windDirectionDeg = 0.0;
 
-% Second-order Lie/Creamer-type bound-wave correction. The wind gain is
-% dimensionless; wind speed is never inserted into a wavenumber operator.
+% Second-order Lie/Creamer-type bound-wave correction. The Elfouhaily
+% spectrum already carries the wind dependence, so the default extra gain
+% is unity and wind speed is never inserted into a wavenumber operator.
 cfg.lie.baseGain = 1.0;
 cfg.lie.referenceWindSpeed = 10.0;
-cfg.lie.windExponent = -0.25;
-cfg.lie.minimumWindGain = 0.70;
-cfg.lie.maximumWindGain = 1.20;
+cfg.lie.windExponent = 0.0;
+cfg.lie.minimumWindGain = 1.0;
+cfg.lie.maximumWindGain = 1.0;
 cfg.lie.directionStrength = 0.35;
 cfg.lie.directionExponent = 2.0;
-cfg.lie.cutoffFraction = 0.65;
-cfg.lie.filterOrder = 8;
+
+% Fixed physical bandwidth for the quadratic bound-wave operation. The
+% input contains wavelengths >= about 1 m; its second harmonics remain
+% below the 0.25 m grid Nyquist limit. A 3/2 padded product removes aliasing.
+cfg.lie.nonlinearInputCutoff = 6.0;
+cfg.lie.nonlinearOutputCutoff = 12.0;
+cfg.lie.filterTransitionFraction = 0.15;
+cfg.lie.dealiasExpansion = 1.5;
 
 % Horizontal Riesz displacement sharpens crests. Its amplitude is reduced
 % automatically until the horizontal mapping remains one-to-one.
