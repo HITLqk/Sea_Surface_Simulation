@@ -1,5 +1,18 @@
 # Cox-Munk 验证代码
 
+## 四组实际海面验证
+
+按旧 `cox_munk.m` 的单幅曲线图格式运行四组实际表面：
+
+```matlab
+[raw,summary,assessment,fig] = ...
+    run_four_group_original_style_validation();
+```
+
+默认使用 `U10=1:20 m/s`、逆波龄 `0.84`、每个风速 3 个配对随机种子。四组分别为 `Linear`、`G0_Nonlinear`、`G1_Upward` 和 `G1_Background`，所有 MSS 都从实际 `(X,Y,Z)` 三角面元法向量计算。输出目录为 `output_four_group_original_style`。
+
+3 个种子用于形成可运行的初步曲线；论文定稿统计应将 `cfg.randomSeeds` 扩展到至少 20 个种子。
+
 ## 1. 原论文图复现
 
 主入口 `run_cox_munk_validation.m` 忠实复现：
