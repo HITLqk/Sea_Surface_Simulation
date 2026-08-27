@@ -1,26 +1,48 @@
 function realization = synthesize_two_group_realization(U10,seed,cfg)
-%SYNTHESIZE_TWO_GROUP_REALIZATION Paired linear and modified-Lie surfaces.
+%SYNTHESIZE_TWO_GROUP_REALIZATION Paired linear and modified-Lie sea states.
 
-rng(seed,'twister');
-g = 9.81;
-kp = g*(cfg.inverseWaveAge/U10)^2;
-dk = kp/cfg.primaryPeakSamples;
+g = 9.81;                                    % m/s^2
+kp = g*(cfg.inverseWaveAge/U10)^2;           % rad/m
+dk = kp/cfg.primaryPeakSamples;              % rad/m
 N = cfg.primaryGridSize;
 kAxis = [0:N/2-1,-N/2:-1]*dk;
 [KX,KY] = meshgrid(kAxis,kAxis);
 K = hypot(KX,KY);
+windAngle = deg2rad(cfg.windDirectionDeg);
+KAlong = KX*cos(windAngle)+KY*sin(windAngle);
+KCross = -KX*sin(windAngle)+KY*cos(windAngle);
 
-[Psi,meta] = thesis_elfouhaily_spectrum(K,KX,KY,U10, ...
-    cfg.inverseWaveAge,cfg.windDirectionDeg);
+[PsiTarget,meta] = thesis_elfouhaily_spectrum(K,KX,KY,U10, ...
+    cfg.inverseWaveAge,cfg.windDirectionDeg,cfg);
 primaryMask = K <= cfg.primaryMaximumPeakMultiple*kp;
-Hlinear = sample_hermitian_coefficients(Psi.*primaryMask,dk,dk);
+PsiTarget = PsiTarget.*primaryMask;
+if cfg.enableSpectralUndressing
+    [PsiInput,undressingHistory] = undress_spectrum_for_lie( ...
+        PsiTarget,KX,KY,K,dk,U10,kp,cfg);
+else
+    PsiInput = PsiTarget;
+    undressingHistory = table();
+end
 
-Hbreaking = apply_thesis_modified_lie(Hlinear,KX,KY,K,U10,kp,cfg);
-linearMss = spectral_mss(Hlinear,KX,KY);
-breakingMss = spectral_mss(Hbreaking,KX,KY);
+% Reset after any diagnostic undressing so paired physical realizations use
+% the requested seed and identical Fourier phases.
+rng(seed,'twister');
+[Hlinear,white] = sample_hermitian_spectrum(PsiTarget,dk,dk);
+HmodifiedInput = sample_hermitian_spectrum(PsiInput,dk,dk,white);
+[Hmodified,lieDiagnostics] = apply_modified_lie_transform( ...
+    HmodifiedInput,KX,KY,K,U10,kp,cfg);
+linearPrimary = spectral_surface_metrics(Hlinear,KAlong,KCross);
+modifiedPrimary = spectral_surface_metrics(Hmodified,KAlong,KCross);
+
+sampleCount = cfg.slopePdfSamplesPerRealization;
+primaryIndices = round(linspace(1,numel(linearPrimary.sx),sampleCount));
+shortAlongSamples = zeros(sampleCount,1);
+shortCrossSamples = zeros(sampleCount,1);
+shortMss = zero_mss();
+maximumShortMssError = 0;
+maximumShortHermitianResidual = 0;
 
 bandLow = cfg.primaryMaximumPeakMultiple*kp;
-shortMss = struct('along',0,'cross',0,'total',0);
 while bandLow < cfg.maximumOpticalWavenumber
     bandHigh = min(2*bandLow,cfg.maximumOpticalWavenumber);
     tileDk = bandLow/cfg.shortWaveModesBelowBand;
@@ -28,77 +50,93 @@ while bandLow < cfg.maximumOpticalWavenumber
     tileAxis = [0:tileN/2-1,-tileN/2:-1]*tileDk;
     [tileKX,tileKY] = meshgrid(tileAxis,tileAxis);
     tileK = hypot(tileKX,tileKY);
+    tileAlong = tileKX*cos(windAngle)+tileKY*sin(windAngle);
+    tileCross = -tileKX*sin(windAngle)+tileKY*cos(windAngle);
     tilePsi = thesis_elfouhaily_spectrum(tileK,tileKX,tileKY,U10, ...
-        cfg.inverseWaveAge,cfg.windDirectionDeg);
+        cfg.inverseWaveAge,cfg.windDirectionDeg,cfg);
     bandMask = tileK >= bandLow & tileK < bandHigh;
-    Hband = sample_hermitian_coefficients(tilePsi.*bandMask,tileDk,tileDk);
-    bandMss = spectral_mss(Hband,tileKX,tileKY);
-    shortMss.along = shortMss.along+bandMss.along;
-    shortMss.cross = shortMss.cross+bandMss.cross;
-    shortMss.total = shortMss.total+bandMss.total;
+    Hband = sample_hermitian_spectrum(tilePsi.*bandMask,tileDk,tileDk);
+    bandMetrics = spectral_surface_metrics(Hband,tileAlong,tileCross);
+    shortMss.along = shortMss.along+bandMetrics.along;
+    shortMss.cross = shortMss.cross+bandMetrics.cross;
+    shortMss.total = shortMss.along+shortMss.cross;
+    tileIndices = round(linspace(1,numel(bandMetrics.sx),sampleCount));
+    tileAlongSamples = bandMetrics.sx(tileIndices);
+    tileCrossSamples = bandMetrics.sy(tileIndices);
+    shortAlongSamples = shortAlongSamples+tileAlongSamples(:);
+    shortCrossSamples = shortCrossSamples+tileCrossSamples(:);
+    maximumShortMssError = max(maximumShortMssError,bandMetrics.mssRelativeError);
+    maximumShortHermitianResidual = max(maximumShortHermitianResidual, ...
+        bandMetrics.hermitianResidual);
     bandLow = bandHigh;
 end
 
-realization.linear = add_mss(linearMss,shortMss);
-realization.breaking = add_mss(breakingMss,shortMss);
-realization.primaryLinear = linearMss;
-realization.primaryBreaking = breakingMss;
+primaryLinearAlong = linearPrimary.sx(primaryIndices);
+primaryLinearCross = linearPrimary.sy(primaryIndices);
+primaryModifiedAlong = modifiedPrimary.sx(primaryIndices);
+primaryModifiedCross = modifiedPrimary.sy(primaryIndices);
+linearAlongSamples = primaryLinearAlong(:)+shortAlongSamples;
+linearCrossSamples = primaryLinearCross(:)+shortCrossSamples;
+modifiedAlongSamples = primaryModifiedAlong(:)+shortAlongSamples;
+modifiedCrossSamples = primaryModifiedCross(:)+shortCrossSamples;
+
+realization.linear = add_mss(linearPrimary,shortMss);
+realization.modifiedLie = add_mss(modifiedPrimary,shortMss);
+realization.primaryLinear = strip_fields(linearPrimary);
+realization.primaryModifiedLie = strip_fields(modifiedPrimary);
 realization.shortWave = shortMss;
-realization.peakWavenumber = meta.peakWavenumber;
+realization.deltaPrimaryMss = modifiedPrimary.total-linearPrimary.total;
+realization.deltaTotalMss = realization.modifiedLie.total-realization.linear.total;
+realization.relativeDeltaPrimaryMss = realization.deltaPrimaryMss/ ...
+    max(linearPrimary.total,realmin);
+realization.relativeDeltaTotalMss = realization.deltaTotalMss/ ...
+    max(realization.linear.total,realmin);
+
+realization.statistics.linear = calculate_statistics( ...
+    linearPrimary.eta,linearAlongSamples,linearCrossSamples);
+realization.statistics.modifiedLie = calculate_statistics( ...
+    modifiedPrimary.eta,modifiedAlongSamples,modifiedCrossSamples);
+realization.slopeSamples.linearAlong = linearAlongSamples;
+realization.slopeSamples.linearCross = linearCrossSamples;
+realization.slopeSamples.modifiedAlong = modifiedAlongSamples;
+realization.slopeSamples.modifiedCross = modifiedCrossSamples;
+
+realization.diagnostics.linearMssRelativeError = linearPrimary.mssRelativeError;
+realization.diagnostics.modifiedMssRelativeError = modifiedPrimary.mssRelativeError;
+realization.diagnostics.maximumShortMssRelativeError = maximumShortMssError;
+realization.diagnostics.linearHermitianResidual = linearPrimary.hermitianResidual;
+realization.diagnostics.modifiedHermitianResidual = modifiedPrimary.hermitianResidual;
+realization.diagnostics.maximumShortHermitianResidual = maximumShortHermitianResidual;
+realization.diagnostics.lie = lieDiagnostics;
+realization.diagnostics.shortWaveCoefficientClamped = ...
+    meta.shortWaveCoefficientClamped;
+realization.diagnostics.rawShortWaveCoefficient = meta.rawShortWaveCoefficient;
+realization.diagnostics.dragCoefficient = meta.dragCoefficient;
+realization.diagnostics.undressingHistory = undressingHistory;
+
+realization.Hlinear = Hlinear;
+realization.Hmodified = Hmodified;
+realization.K = K;
+realization.KX = KX;
+realization.KY = KY;
+realization.dk = dk;
+realization.peakWavenumber = kp;
 realization.primaryDomainLength = 2*pi/dk;
 realization.primarySpacing = realization.primaryDomainLength/N;
-realization.rawShortWaveCoefficient = meta.rawShortWaveCoefficient;
-realization.linearSurface = real(ifft2(Hlinear))*N^2;
-realization.breakingSurface = real(ifft2(Hbreaking))*N^2;
+realization.linearSurface = linearPrimary.eta;
+realization.modifiedLieSurface = modifiedPrimary.eta;
 end
 
-function H = sample_hermitian_coefficients(Psi,dkx,dky)
-[Ny,Nx] = size(Psi);
-white = (randn(Ny,Nx)+1i*randn(Ny,Nx))/sqrt(2);
-negativeX = [1,Nx:-1:2];
-negativeY = [1,Ny:-1:2];
-white = (white+conj(white(negativeY,negativeX)))/sqrt(2);
-H = sqrt(Psi*dkx*dky).*white;
-end
-
-function Hnonlinear = apply_thesis_modified_lie(H,KX,KY,K,U10,kp,cfg)
-Ksafe = max(K,realmin);
-inputMask = K <= cfg.lieInputPeakMultiple*kp;
-outputMask = K <= cfg.lieOutputPeakMultiple*kp;
-N = size(H,1);
-
-% h_tx and h_ty in the Lie/Creamer formulation are the two Riesz
-% (multidimensional Hilbert) components of elevation, not spatial slopes.
-% Treating them as derivatives introduces an erroneous k^2 amplification.
-Htx = -1i*(KX./Ksafe).*H.*inputMask;
-Hty = -1i*(KY./Ksafe).*H.*inputMask;
-htx = real(ifft2(Htx))*N^2;
-hty = real(ifft2(Hty))*N^2;
-Fxx = fft2(htx.^2)/N^2;
-Fxy = fft2(htx.*hty)/N^2;
-Fyy = fft2(hty.^2)/N^2;
-
-% Thesis equation (2.31). Absolute directional projections are the
-% real-surface form of the wind factors; signed odd multipliers would
-% destroy Hermitian symmetry and yield an imaginary elevation field.
-windX = U10*abs(KX)./Ksafe;
-windY = U10*abs(KY)./Ksafe;
-Lstar = -(KX.^2./(2*Ksafe)).*windX.*Fxx ...
-    -(KX.*KY./Ksafe).*Fxy ...
-    -(KY.^2./(2*Ksafe)).*windY.*Fyy;
-Lstar = cfg.modifiedLieScale*Lstar.*outputMask;
-Lstar(K == 0) = 0;
-Hnonlinear = H+Lstar;
-
-negative = [1,N:-1:2];
-Hnonlinear = (Hnonlinear+conj(Hnonlinear(negative,negative)))/2;
-end
-
-function stats = spectral_mss(H,KX,KY)
-stats.along = sum(KX.^2.*abs(H).^2,'all');
-stats.cross = sum(KY.^2.*abs(H).^2,'all');
-stats.total = stats.along+stats.cross;
-stats.gamma = sqrt(stats.cross/max(stats.along,realmin));
+function stats = calculate_statistics(elevation,alongSlope,crossSlope)
+elevationMoments = field_standardized_moments(elevation);
+alongMoments = field_standardized_moments(alongSlope);
+crossMoments = field_standardized_moments(crossSlope);
+stats.ElevationSkewness = elevationMoments.skewness;
+stats.ElevationExcessKurtosis = elevationMoments.excessKurtosis;
+stats.AlongSlopeSkewness = alongMoments.skewness;
+stats.AlongSlopeExcessKurtosis = alongMoments.excessKurtosis;
+stats.CrossSlopeSkewness = crossMoments.skewness;
+stats.CrossSlopeExcessKurtosis = crossMoments.excessKurtosis;
 end
 
 function result = add_mss(primary,shortWave)
@@ -106,4 +144,20 @@ result.along = primary.along+shortWave.along;
 result.cross = primary.cross+shortWave.cross;
 result.total = result.along+result.cross;
 result.gamma = sqrt(result.cross/max(result.along,realmin));
+end
+
+function result = strip_fields(metrics)
+result.along = metrics.along;
+result.cross = metrics.cross;
+result.total = metrics.total;
+result.gamma = metrics.gamma;
+result.spatialTotal = metrics.spatialTotal;
+result.mssRelativeError = metrics.mssRelativeError;
+result.hermitianResidual = metrics.hermitianResidual;
+end
+
+function result = zero_mss()
+result.along = 0;
+result.cross = 0;
+result.total = 0;
 end

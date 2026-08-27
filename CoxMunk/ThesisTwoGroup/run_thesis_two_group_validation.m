@@ -1,235 +1,351 @@
-function [raw,summary,reference,assessment] = run_thesis_two_group_validation(cfg)
-%RUN_THESIS_TWO_GROUP_VALIDATION Clean Elfouhaily versus modified-Lie test.
-%   The only groups are Linear Elfouhaily and Modified Lie Breaking.
+function [raw,summary,reference,assessment,diagnostics] = ...
+    run_thesis_two_group_validation(cfg)
+%RUN_THESIS_TWO_GROUP_VALIDATION Paired Elfouhaily/Lie validation suite.
 
 arguments
     cfg (1,1) struct = default_thesis_two_group_config()
 end
 validate_config(cfg);
-if ~isfolder(cfg.outputDirectory)
-    mkdir(cfg.outputDirectory);
-end
+if ~isfolder(cfg.outputDirectory), mkdir(cfg.outputDirectory); end
 
+groups = ["Linear Elfouhaily","Modified Lie Nonlinear"];
 reference = two_group_mss_references(cfg.windSpeeds,cfg);
-groups = ["Linear Elfouhaily","Modified Lie Breaking"];
-nRows = numel(cfg.windSpeeds)*numel(cfg.realizationSeeds)*numel(groups);
-U10 = zeros(nRows,1);
-Seed = zeros(nRows,1);
-Group = strings(nRows,1);
-MssAlong = zeros(nRows,1);
-MssCross = zeros(nRows,1);
-MssTotal = zeros(nRows,1);
-Gamma = zeros(nRows,1);
-PrimaryMss = zeros(nRows,1);
-ShortWaveMss = zeros(nRows,1);
+nRows = numel(cfg.windSpeeds)*numel(cfg.realizationSeeds)*2;
+records = repmat(empty_record(),nRows,1);
 row = 0;
-example = struct();
+examples = struct();
+pdfData = struct();
+clampedWinds = [];
 
 for windIndex = 1:numel(cfg.windSpeeds)
-    windSpeed = cfg.windSpeeds(windIndex);
+    U10 = cfg.windSpeeds(windIndex);
+    pdfKey = sprintf('U%d',U10);
+    if ismember(U10,cfg.slopePdfWinds)
+        pdfData.(pdfKey) = empty_pdf_data();
+    end
     for seedIndex = 1:numel(cfg.realizationSeeds)
         seed = cfg.realizationSeeds(seedIndex);
-        result = synthesize_two_group_realization(windSpeed,seed,cfg);
-        row = add_row(row,windSpeed,seed,groups(1),result.linear, ...
-            result.primaryLinear.total,result.shortWave.total);
-        row = add_row(row,windSpeed,seed,groups(2),result.breaking, ...
-            result.primaryBreaking.total,result.shortWave.total);
-        if seedIndex == 1 && (windSpeed == 5 || windSpeed == 10)
-            example.(sprintf('U%d',windSpeed)) = result;
+        result = synthesize_two_group_realization(U10,seed,cfg);
+        row = row+1;
+        records(row) = make_record(result,U10,seed,groups(1),false);
+        row = row+1;
+        records(row) = make_record(result,U10,seed,groups(2),true);
+
+        if result.diagnostics.shortWaveCoefficientClamped
+            clampedWinds(end+1,1) = U10; %#ok<AGROW>
         end
+        if seedIndex == 1 && ismember(U10,[5 10])
+            examples.(pdfKey) = extract_surface_example(result);
+        end
+        if ismember(U10,cfg.slopePdfWinds)
+            pdfData.(pdfKey) = append_pdf_data(pdfData.(pdfKey),result);
+        end
+        check_numerics(result,cfg,U10,seed);
     end
 end
-
-raw = table(U10,Seed,Group,MssAlong,MssCross,MssTotal,Gamma, ...
-    PrimaryMss,ShortWaveMss);
+raw = struct2table(records);
 summary = summarize_results(raw,groups,cfg.windSpeeds);
 assessment = assess_results(summary,reference,groups);
 
-figMss = plot_mss(summary,reference,groups,cfg);
-figGamma = plot_gamma(summary,reference,groups,cfg);
-figExamples = plot_examples(example,cfg);
-exportgraphics(figMss,fullfile(cfg.outputDirectory,'01_two_group_mss.png'), ...
-    'Resolution',cfg.exportResolution);
-exportgraphics(figGamma,fullfile(cfg.outputDirectory,'02_two_group_anisotropy.png'), ...
-    'Resolution',cfg.exportResolution);
-exportgraphics(figExamples,fullfile(cfg.outputDirectory,'03_surface_examples.png'), ...
-    'Resolution',cfg.exportResolution);
-close(figMss); close(figGamma); close(figExamples);
+spectralDiagnostics = run_spectral_diagnostics(cfg);
+cutoffSensitivity = run_cutoff_sensitivity(cfg);
+windFactorDiagnostics = run_wind_factor_diagnostics(cfg);
+diagnostics.spectral = spectralDiagnostics;
+diagnostics.cutoff = cutoffSensitivity;
+diagnostics.windFactor = windFactorDiagnostics;
+diagnostics.examples = examples;
+diagnostics.pdf = pdfData;
 
+plot_two_group_validation_outputs(summary,reference,diagnostics,cfg);
 writetable(raw,fullfile(cfg.outputDirectory,'two_group_raw.csv'));
 writetable(summary,fullfile(cfg.outputDirectory,'two_group_summary.csv'));
 writetable(reference,fullfile(cfg.outputDirectory,'two_group_reference.csv'));
 writetable(assessment,fullfile(cfg.outputDirectory,'two_group_assessment.csv'));
+writetable(spectralDiagnostics, ...
+    fullfile(cfg.outputDirectory,'spectral_diagnostics.csv'));
+writetable(cutoffSensitivity, ...
+    fullfile(cfg.outputDirectory,'cutoff_sensitivity.csv'));
+writetable(windFactorDiagnostics, ...
+    fullfile(cfg.outputDirectory,'wind_factor_diagnostics.csv'));
 save(fullfile(cfg.outputDirectory,'two_group_validation.mat'), ...
-    'raw','summary','reference','assessment','cfg','example','-v7.3');
-disp(assessment);
+    'raw','summary','reference','assessment','diagnostics','cfg','-v7.3');
+write_two_group_validation_report(summary,reference,assessment, ...
+    diagnostics,cfg);
 
-    function nextRow = add_row(currentRow,wind,seedValue,groupName,mss,primary,shortWave)
-        nextRow = currentRow+1;
-        U10(nextRow) = wind;
-        Seed(nextRow) = seedValue;
-        Group(nextRow) = groupName;
-        MssAlong(nextRow) = mss.along;
-        MssCross(nextRow) = mss.cross;
-        MssTotal(nextRow) = mss.total;
-        Gamma(nextRow) = mss.gamma;
-        PrimaryMss(nextRow) = primary;
-        ShortWaveMss(nextRow) = shortWave;
-    end
+if cfg.warnOnShortWaveClamp && ~isempty(clampedWinds)
+    warning('Elfouhaily:ShortWaveCoefficientClamped', ...
+        ['alpha_m was negative and clamped to zero at U10 = %s m/s. ', ...
+        'The original short-wave parameterization is outside its reliable ', ...
+        'low-wind range there.'],mat2str(unique(clampedWinds)'));
+end
+disp(assessment);
+end
+
+function record = empty_record()
+record = struct('U10',0,'Seed',0,'Group',"",'MssAlong',0,'MssCross',0, ...
+    'MssTotal',0,'Gamma',0,'PrimaryMssLinear',0,'PrimaryMssModified',0, ...
+    'ShortWaveMss',0,'DeltaPrimaryMss',0,'DeltaTotalMss',0, ...
+    'RelativeDeltaPrimaryMss',0,'RelativeDeltaTotalMss',0, ...
+    'ElevationSkewness',0,'ElevationExcessKurtosis',0, ...
+    'AlongSlopeSkewness',0,'AlongSlopeExcessKurtosis',0, ...
+    'CrossSlopeSkewness',0,'CrossSlopeExcessKurtosis',0, ...
+    'MssNumericalRelativeError',0,'HermitianResidual',0, ...
+    'RieszEnergyRatio',0,'LiePreProjectionHermitianResidual',0, ...
+    'DragCoefficient',0,'RawShortWaveCoefficient',0, ...
+    'WindFactorMode',"",'DimensionalStatus',"");
+end
+
+function record = make_record(result,U10,seed,group,isModified)
+record = empty_record();
+record.U10 = U10; record.Seed = seed; record.Group = group;
+if isModified
+    mss = result.modifiedLie;
+    stats = result.statistics.modifiedLie;
+    record.MssNumericalRelativeError = ...
+        result.diagnostics.modifiedMssRelativeError;
+    record.HermitianResidual = result.diagnostics.modifiedHermitianResidual;
+else
+    mss = result.linear;
+    stats = result.statistics.linear;
+    record.MssNumericalRelativeError = result.diagnostics.linearMssRelativeError;
+    record.HermitianResidual = result.diagnostics.linearHermitianResidual;
+end
+record.MssAlong = mss.along; record.MssCross = mss.cross;
+record.MssTotal = mss.total; record.Gamma = mss.gamma;
+record.PrimaryMssLinear = result.primaryLinear.total;
+record.PrimaryMssModified = result.primaryModifiedLie.total;
+record.ShortWaveMss = result.shortWave.total;
+record.DeltaPrimaryMss = result.deltaPrimaryMss;
+record.DeltaTotalMss = result.deltaTotalMss;
+record.RelativeDeltaPrimaryMss = result.relativeDeltaPrimaryMss;
+record.RelativeDeltaTotalMss = result.relativeDeltaTotalMss;
+record.ElevationSkewness = stats.ElevationSkewness;
+record.ElevationExcessKurtosis = stats.ElevationExcessKurtosis;
+record.AlongSlopeSkewness = stats.AlongSlopeSkewness;
+record.AlongSlopeExcessKurtosis = stats.AlongSlopeExcessKurtosis;
+record.CrossSlopeSkewness = stats.CrossSlopeSkewness;
+record.CrossSlopeExcessKurtosis = stats.CrossSlopeExcessKurtosis;
+record.RieszEnergyRatio = result.diagnostics.lie.rieszEnergyRatio;
+record.LiePreProjectionHermitianResidual = ...
+    result.diagnostics.lie.preProjectionHermitianResidual;
+record.DragCoefficient = result.diagnostics.dragCoefficient;
+record.RawShortWaveCoefficient = result.diagnostics.rawShortWaveCoefficient;
+record.WindFactorMode = result.diagnostics.lie.windFactorMode;
+record.DimensionalStatus = result.diagnostics.lie.dimensionalStatus;
+end
+
+function pdf = empty_pdf_data()
+pdf = struct('linearAlong',[],'linearCross',[],'modifiedAlong',[], ...
+    'modifiedCross',[]);
+end
+
+function pdf = append_pdf_data(pdf,result)
+linearAlong = result.slopeSamples.linearAlong(:);
+linearCross = result.slopeSamples.linearCross(:);
+modifiedAlong = result.slopeSamples.modifiedAlong(:);
+modifiedCross = result.slopeSamples.modifiedCross(:);
+pdf.linearAlong = [pdf.linearAlong;linearAlong];
+pdf.linearCross = [pdf.linearCross;linearCross];
+pdf.modifiedAlong = [pdf.modifiedAlong;modifiedAlong];
+pdf.modifiedCross = [pdf.modifiedCross;modifiedCross];
+end
+
+function example = extract_surface_example(result)
+example.linearSurface = result.linearSurface;
+example.modifiedLieSurface = result.modifiedLieSurface;
+example.primarySpacing = result.primarySpacing;
 end
 
 function summary = summarize_results(raw,groups,winds)
-n = numel(groups)*numel(winds);
-Group = strings(n,1); U10 = zeros(n,1);
-AlongMedian = zeros(n,1); CrossMedian = zeros(n,1);
-TotalMedian = zeros(n,1); TotalQ05 = zeros(n,1); TotalQ25 = zeros(n,1);
-TotalQ75 = zeros(n,1); TotalQ95 = zeros(n,1); GammaMedian = zeros(n,1);
+rows = repmat(empty_summary(),numel(groups)*numel(winds),1);
 row = 0;
-for groupIndex = 1:numel(groups)
-    for windIndex = 1:numel(winds)
+for group = groups
+    for wind = reshape(winds,1,[])
         row = row+1;
-        selected = raw.Group == groups(groupIndex) & raw.U10 == winds(windIndex);
-        Group(row) = groups(groupIndex); U10(row) = winds(windIndex);
-        AlongMedian(row) = median(raw.MssAlong(selected));
-        CrossMedian(row) = median(raw.MssCross(selected));
-        q = local_quantile(raw.MssTotal(selected),[0.05 0.25 0.5 0.75 0.95]);
-        TotalQ05(row)=q(1); TotalQ25(row)=q(2); TotalMedian(row)=q(3);
-        TotalQ75(row)=q(4); TotalQ95(row)=q(5);
-        GammaMedian(row) = median(raw.Gamma(selected));
+        selected = raw.Group == group & raw.U10 == wind;
+        rows(row) = make_summary(raw(selected,:),group,wind);
     end
 end
-summary = table(Group,U10,AlongMedian,CrossMedian,TotalMedian,TotalQ05, ...
-    TotalQ25,TotalQ75,TotalQ95,GammaMedian);
+summary = struct2table(rows);
+end
+
+function result = empty_summary()
+result = struct('Group',"",'U10',0,'AlongMedian',0,'CrossMedian',0, ...
+    'TotalMedian',0,'TotalQ05',0,'TotalQ25',0,'TotalQ75',0,'TotalQ95',0, ...
+    'GammaMedian',0,'PrimaryMssLinearMedian',0, ...
+    'PrimaryMssModifiedMedian',0,'ShortWaveMssMedian',0, ...
+    'DeltaPrimaryMssMedian',0,'DeltaTotalMssMedian',0, ...
+    'RelativeDeltaPrimaryMssMedian',0,'RelativeDeltaTotalMssMedian',0, ...
+    'ElevationSkewnessMedian',0,'ElevationExcessKurtosisMedian',0, ...
+    'AlongSlopeSkewnessMedian',0,'AlongSlopeExcessKurtosisMedian',0, ...
+    'CrossSlopeSkewnessMedian',0,'CrossSlopeExcessKurtosisMedian',0, ...
+    'MaximumMssNumericalRelativeError',0,'MaximumHermitianResidual',0, ...
+    'RieszEnergyRatioMedian',0);
+end
+
+function result = make_summary(data,group,wind)
+result = empty_summary(); result.Group = group; result.U10 = wind;
+result.AlongMedian = median(data.MssAlong);
+result.CrossMedian = median(data.MssCross);
+q = local_quantile(data.MssTotal,[0.05 0.25 0.5 0.75 0.95]);
+result.TotalQ05=q(1); result.TotalQ25=q(2); result.TotalMedian=q(3);
+result.TotalQ75=q(4); result.TotalQ95=q(5);
+result.GammaMedian = median(data.Gamma);
+names = {'PrimaryMssLinear','PrimaryMssModified','ShortWaveMss', ...
+    'DeltaPrimaryMss','DeltaTotalMss','RelativeDeltaPrimaryMss', ...
+    'RelativeDeltaTotalMss','ElevationSkewness','ElevationExcessKurtosis', ...
+    'AlongSlopeSkewness','AlongSlopeExcessKurtosis', ...
+    'CrossSlopeSkewness','CrossSlopeExcessKurtosis'};
+for index = 1:numel(names)
+    result.([names{index},'Median']) = median(data.(names{index}));
+end
+result.MaximumMssNumericalRelativeError = max(data.MssNumericalRelativeError);
+result.MaximumHermitianResidual = max(data.HermitianResidual);
+result.RieszEnergyRatioMedian = median(data.RieszEnergyRatio);
 end
 
 function assessment = assess_results(summary,reference,groups)
-Group = groups(:);
-RMSE_CoxMunk = zeros(numel(groups),1);
-RMSE_Guerin = zeros(numel(groups),1);
-RMSE_TGRS_Hu = zeros(numel(groups),1);
-RMSE_Elfouhaily = zeros(numel(groups),1);
-MeanAbsGammaError_TGRS = zeros(numel(groups),1);
-for index = 1:numel(groups)
-    selected = summary.Group == groups(index);
-    groupSummary = sortrows(summary(selected,:),'U10');
-    total = groupSummary.TotalMedian;
-    RMSE_CoxMunk(index) = sqrt(mean((total-reference.CoxMunkTotal).^2));
+Group = groups(:); n = numel(groups);
+RMSE_CoxMunk = zeros(n,1); RMSE_Guerin = zeros(n,1);
+RMSE_TGRS_Hu = zeros(n,1); RMSE_Elfouhaily = zeros(n,1);
+MeanAbsGammaError_TGRS = zeros(n,1);
+for index = 1:n
+    data = sortrows(summary(summary.Group == groups(index),:),'U10');
+    RMSE_CoxMunk(index) = rms_error(data.TotalMedian,reference.CoxMunkTotal);
     valid = isfinite(reference.GuerinTotal);
-    RMSE_Guerin(index) = sqrt(mean((total(valid)-reference.GuerinTotal(valid)).^2));
-    RMSE_TGRS_Hu(index) = sqrt(mean((total-reference.TgrsHuTotal).^2));
-    RMSE_Elfouhaily(index) = sqrt(mean((total-reference.ElfouhailyTotal).^2));
-    MeanAbsGammaError_TGRS(index) = mean(abs( ...
-        groupSummary.GammaMedian-reference.TgrsGamma));
+    RMSE_Guerin(index) = rms_error(data.TotalMedian(valid),reference.GuerinTotal(valid));
+    RMSE_TGRS_Hu(index) = rms_error(data.TotalMedian,reference.TgrsHuTotal);
+    RMSE_Elfouhaily(index) = rms_error(data.TotalMedian,reference.ElfouhailyTotal);
+    MeanAbsGammaError_TGRS(index) = mean(abs(data.GammaMedian-reference.TgrsGamma));
 end
 assessment = table(Group,RMSE_CoxMunk,RMSE_Guerin,RMSE_TGRS_Hu, ...
     RMSE_Elfouhaily,MeanAbsGammaError_TGRS);
 end
 
-function fig = plot_mss(summary,reference,groups,cfg)
-fig = figure('Visible',cfg.figureVisible,'Color','w', ...
-    'Position',[100 100 1260 480]);
-tiledlayout(1,2,'TileSpacing','compact','Padding','compact');
-colors = lines(numel(groups));
-for index = 1:numel(groups)
-    ax = nexttile; hold(ax,'on');
-    selected = sortrows(summary(summary.Group == groups(index),:),'U10');
-    fill(ax,[selected.U10;flipud(selected.U10)], ...
-        [selected.TotalQ05;flipud(selected.TotalQ95)],colors(index,:), ...
-        'FaceAlpha',0.12,'EdgeColor','none','DisplayName','5%-95%');
-    fill(ax,[selected.U10;flipud(selected.U10)], ...
-        [selected.TotalQ25;flipud(selected.TotalQ75)],colors(index,:), ...
-        'FaceAlpha',0.28,'EdgeColor','none','DisplayName','IQR');
-    plot(ax,selected.U10,selected.TotalMedian,'o-', ...
-        'Color',colors(index,:),'LineWidth',1.8,'DisplayName','Simulation median');
-    plot(ax,reference.U10,reference.ElfouhailyTotal,'k:','LineWidth',1.6, ...
-        'DisplayName','Elfouhaily integral');
-    plot(ax,reference.U10,reference.CoxMunkTotal,'k--','LineWidth',1.5, ...
-        'DisplayName','Cox-Munk');
-    plot(ax,reference.U10,reference.TgrsHuTotal,'Color',[0.8 0.2 0.1], ...
-        'LineStyle','-.','LineWidth',1.5,'DisplayName','TGRS/Hu');
-    plot(ax,reference.U10,reference.GuerinTotal,'s','Color',[0.1 0.35 0.8], ...
-        'MarkerFaceColor','none','DisplayName','Guerin IASI');
-    title(ax,groups(index)); xlabel(ax,'U_{10} (m/s)'); ylabel(ax,'Total MSS');
-    grid(ax,'on'); box(ax,'on'); xlim(ax,[1 10]);
-    if index == 1, legend(ax,'Location','northwest'); end
-end
-linkaxes(findall(fig,'Type','axes'),'xy');
-end
-
-function fig = plot_gamma(summary,reference,groups,cfg)
-fig = figure('Visible',cfg.figureVisible,'Color','w', ...
-    'Position',[120 120 1260 480]);
-tiledlayout(1,2,'TileSpacing','compact','Padding','compact');
-colors = lines(numel(groups));
-for index = 1:numel(groups)
-    ax = nexttile; hold(ax,'on');
-    selected = sortrows(summary(summary.Group == groups(index),:),'U10');
-    plot(ax,selected.U10,selected.GammaMedian,'o-', ...
-        'Color',colors(index,:),'LineWidth',1.8,'DisplayName','Simulation');
-    plot(ax,reference.U10,reference.ElfouhailyGamma,'k:','LineWidth',1.6, ...
-        'DisplayName','Elfouhaily integral');
-    plot(ax,reference.U10,reference.GuerinGamma,'s','Color',[0.1 0.35 0.8], ...
-        'MarkerFaceColor','none','DisplayName','Guerin IASI');
-    yline(ax,0.864,'-.','TGRS mean 0.864','Color',[0.8 0.2 0.1], ...
-        'LineWidth',1.5,'LabelHorizontalAlignment','left', ...
-        'HandleVisibility','off');
-    yline(ax,0.84,'--','TGRS simulated 0.84','Color',[0.45 0.2 0.6], ...
-        'LineWidth',1.2,'LabelHorizontalAlignment','left', ...
-        'HandleVisibility','off');
-    title(ax,groups(index)); xlabel(ax,'U_{10} (m/s)');
-    ylabel(ax,'Anisotropy \gamma'); grid(ax,'on'); box(ax,'on'); xlim(ax,[1 10]);
-    if index == 1, legend(ax,'Location','best'); end
-end
-linkaxes(findall(fig,'Type','axes'),'xy');
-end
-
-function fig = plot_examples(example,cfg)
-fig = figure('Visible',cfg.figureVisible,'Color','w', ...
-    'Position',[140 80 1480 800]);
-tiledlayout(2,3,'TileSpacing','compact','Padding','compact');
-winds = [5 10];
-for windIndex = 1:numel(winds)
-    result = example.(sprintf('U%d',winds(windIndex)));
-    surfaces = {result.linearSurface,result.breakingSurface};
-    names = {'Linear Elfouhaily','Modified Lie Breaking'};
-    commonLimit = max(abs([surfaces{1}(:);surfaces{2}(:)]));
-    coordinates = (0:size(surfaces{1},1)-1)*result.primarySpacing;
-    for groupIndex = 1:2
-        ax = nexttile; imagesc(ax,coordinates,coordinates,surfaces{groupIndex});
-        axis(ax,'image'); axis(ax,'xy'); caxis(ax,[-commonLimit commonLimit]);
-        colormap(ax,parula); colorbar(ax);
-        title(ax,sprintf('%s, U_{10}=%d m/s',names{groupIndex},winds(windIndex)));
-        xlabel(ax,'x (m)'); ylabel(ax,'y (m)');
+function tableOut = run_spectral_diagnostics(cfg)
+rows = table();
+for U10 = reshape(cfg.spectralDiagnosticWinds,1,[])
+    accumulated = [];
+    for seed = reshape(cfg.spectralDiagnosticSeeds,1,[])
+        result = synthesize_two_group_realization(U10,seed,cfg);
+        radial = radial_spectrum_diagnostics(result.Hlinear,result.Hmodified, ...
+            result.K,result.peakWavenumber,cfg);
+        if isempty(accumulated)
+            accumulated = radial;
+            fields = fieldnames(radial);
+            for field = 2:numel(fields), accumulated.(fields{field}) = 0; end
+        end
+        fields = fieldnames(radial);
+        for field = 2:numel(fields)
+            accumulated.(fields{field}) = accumulated.(fields{field})+ ...
+                radial.(fields{field});
+        end
     end
-    ax = nexttile; hold(ax,'on');
-    centerRow = floor(size(surfaces{1},1)/2)+1;
-    plot(ax,coordinates,surfaces{1}(centerRow,:),'LineWidth',1.4, ...
-        'DisplayName','Linear');
-    plot(ax,coordinates,surfaces{2}(centerRow,:),'LineWidth',1.4, ...
-        'DisplayName','Modified Lie');
-    title(ax,sprintf('Paired center section, U_{10}=%d m/s',winds(windIndex)));
-    xlabel(ax,'x (m)'); ylabel(ax,'Elevation (m)'); grid(ax,'on'); box(ax,'on');
-    legend(ax,'Location','best');
+    fields = fieldnames(accumulated);
+    for field = 2:numel(fields)
+        accumulated.(fields{field}) = accumulated.(fields{field})/ ...
+            numel(cfg.spectralDiagnosticSeeds);
+    end
+    n = numel(accumulated.K);
+    windTable = table(repmat(U10,n,1),accumulated.K, ...
+        accumulated.LinearSpectrum,accumulated.ModifiedSpectrum, ...
+        accumulated.LinearMssIntegrand,accumulated.ModifiedMssIntegrand, ...
+        accumulated.DressingRatio,'VariableNames',{'U10','K', ...
+        'LinearSpectrum','ModifiedSpectrum','LinearMssIntegrand', ...
+        'ModifiedMssIntegrand','DressingRatio'});
+    rows = [rows;windTable]; %#ok<AGROW>
+end
+tableOut = rows;
+end
+
+function tableOut = run_cutoff_sensitivity(cfg)
+rows = cell(0,4);
+for U10 = reshape(cfg.slopePdfWinds,1,[])
+    [~,~,cumulative] = integrated_elfouhaily_mss(U10, ...
+        cfg.maximumOpticalWavenumber,cfg);
+    for kMaximum = reshape(cfg.opticalCutoffSweep,1,[])
+        total = interp1(cumulative.K,cumulative.TotalMss,kMaximum, ...
+            'linear','extrap');
+        rows = [rows;{U10,"sweep",kMaximum,total}]; %#ok<AGROW>
+    end
+    cumulativeK = logspace(0,log10(cfg.maximumOpticalWavenumber), ...
+        cfg.cutoffCumulativePoints)';
+    cumulativeMss = interp1(cumulative.K,cumulative.TotalMss,cumulativeK, ...
+        'linear','extrap');
+    for index = 1:numel(cumulativeK)
+        rows = [rows;{U10,"cumulative",cumulativeK(index), ...
+            cumulativeMss(index)}]; %#ok<AGROW>
+    end
+end
+tableOut = cell2table(rows,'VariableNames',{'U10','Series','Kmax','MssTotal'});
+end
+
+function tableOut = run_wind_factor_diagnostics(cfg)
+rows = cell(0,6);
+for mode = cfg.windFactorModes
+    diagnosticCfg = cfg;
+    diagnosticCfg.windFactorMode = mode;
+    diagnosticCfg.enableSpectralUndressing = false;
+    for U10 = reshape(cfg.windFactorDiagnosticWinds,1,[])
+        total = zeros(numel(cfg.windFactorDiagnosticSeeds),1);
+        delta = zeros(size(total)); gamma = zeros(size(total));
+        deltaPrimary = zeros(size(total));
+        for index = 1:numel(cfg.windFactorDiagnosticSeeds)
+            result = synthesize_two_group_realization(U10, ...
+                cfg.windFactorDiagnosticSeeds(index),diagnosticCfg);
+            total(index) = result.modifiedLie.total;
+            delta(index) = result.deltaTotalMss;
+            gamma(index) = result.modifiedLie.gamma;
+            deltaPrimary(index) = result.deltaPrimaryMss;
+        end
+        rows = [rows;{mode,U10,median(total),median(delta), ...
+            median(deltaPrimary),median(gamma)}]; %#ok<AGROW>
+    end
+end
+tableOut = cell2table(rows,'VariableNames',{'WindFactorMode','U10', ...
+    'MssTotal','DeltaMss','DeltaPrimaryMss','Gamma'});
+end
+
+function check_numerics(result,cfg,U10,seed)
+values = [result.diagnostics.linearMssRelativeError, ...
+    result.diagnostics.modifiedMssRelativeError, ...
+    result.diagnostics.maximumShortMssRelativeError, ...
+    result.diagnostics.linearHermitianResidual, ...
+    result.diagnostics.modifiedHermitianResidual, ...
+    result.diagnostics.maximumShortHermitianResidual];
+if any(values > cfg.numericalRelativeTolerance)
+    warning('Validation:NumericalConsistency', ...
+        'Numerical consistency exceeded %.1e at U10=%g, seed=%g (max %.3e).', ...
+        cfg.numericalRelativeTolerance,U10,seed,max(values));
+end
+if abs(result.diagnostics.lie.rieszEnergyRatio-1) > 1e-10
+    warning('Validation:RieszEnergy', ...
+        'Riesz energy identity error at U10=%g, seed=%g: %.3e.', ...
+        U10,seed,abs(result.diagnostics.lie.rieszEnergyRatio-1));
 end
 end
 
 function q = local_quantile(values,p)
 values = sort(values(:));
 positions = 1+(numel(values)-1)*p;
-lower = floor(positions); upper = ceil(positions);
-weight = positions-lower;
+lower = floor(positions); upper = ceil(positions); weight = positions-lower;
 q = values(lower).*(1-weight)+values(upper).*weight;
+end
+
+function value = rms_error(a,b)
+value = sqrt(mean((a-b).^2));
 end
 
 function validate_config(cfg)
 assert(isequal(cfg.windSpeeds(:),(1:10)'), ...
-    'This experiment is fixed to the requested 1:1:10 m/s wind grid.');
-assert(all(cfg.realizationSeeds == floor(cfg.realizationSeeds)), ...
-    'Realization seeds must be integers.');
-assert(cfg.primaryPeakSamples >= 10, ...
-    'The primary grid must satisfy the thesis dk <= kp/10 condition.');
+    'The requested experiment uses U10=1:1:10 m/s.');
+assert(cfg.primaryPeakSamples >= 10,'dk must be no greater than kp/10.');
+assert(cfg.lieInputPeakMultiple*2 <= cfg.lieOutputPeakMultiple, ...
+    'Quadratic output bandwidth must be at least twice the input bandwidth.');
 assert(cfg.lieOutputPeakMultiple <= cfg.primaryMaximumPeakMultiple, ...
-    'The Lie output band must be contained in the primary grid band.');
-assert(cfg.maximumOpticalWavenumber > 370, ...
-    'The optical cutoff must include the Elfouhaily short-wave peak.');
+    'Lie output must remain inside the primary represented band.');
+assert(cfg.maximumOpticalWavenumber >= max(cfg.opticalCutoffSweep), ...
+    'maximumOpticalWavenumber must cover opticalCutoffSweep.');
+assert(ismember(string(cfg.windFactorMode),cfg.windFactorModes), ...
+    'Unknown windFactorMode.');
 end

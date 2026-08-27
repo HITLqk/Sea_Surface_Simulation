@@ -1,5 +1,5 @@
 function reference = two_group_mss_references(windSpeeds,cfg)
-%TWO_GROUP_MSS_REFERENCES External MSS laws and the generating spectrum.
+%TWO_GROUP_MSS_REFERENCES External MSS laws and generating-spectrum moments.
 
 U10 = windSpeeds(:);
 U12p5 = U10/0.98;
@@ -22,8 +22,13 @@ TgrsHuCross = TgrsHuTotal-TgrsHuAlong;
 GuerinTotal = GuerinAlong+GuerinCross;
 GuerinGamma = sqrt(GuerinCross./GuerinAlong);
 
-[ElfouhailyAlong,ElfouhailyCross] = arrayfun( ...
-    @(u) integrated_elfouhaily_mss(u,cfg),U10);
+ElfouhailyAlong = zeros(size(U10));
+ElfouhailyCross = zeros(size(U10));
+for index = 1:numel(U10)
+    [ElfouhailyAlong(index),ElfouhailyCross(index)] = ...
+        integrated_elfouhaily_mss(U10(index), ...
+        cfg.maximumOpticalWavenumber,cfg);
+end
 ElfouhailyTotal = ElfouhailyAlong+ElfouhailyCross;
 ElfouhailyGamma = sqrt(ElfouhailyCross./ElfouhailyAlong);
 
@@ -31,26 +36,6 @@ reference = table(U10,CoxMunkAlong,CoxMunkCross,CoxMunkTotal, ...
     GuerinAlong,GuerinCross,GuerinTotal,GuerinGamma, ...
     TgrsHuAlong,TgrsHuCross,TgrsHuTotal,TgrsGamma, ...
     ElfouhailyAlong,ElfouhailyCross,ElfouhailyTotal,ElfouhailyGamma);
-end
-
-function [along,crosswind] = integrated_elfouhaily_mss(U10,cfg)
-k = logspace(-5,log10(cfg.maximumOpticalWavenumber),40000);
-K = reshape(k,1,[]);
-[PsiAlong,~] = thesis_elfouhaily_spectrum(K,K,zeros(size(K)),U10, ...
-    cfg.inverseWaveAge,cfg.windDirectionDeg);
-[PsiCross,~] = thesis_elfouhaily_spectrum(K,zeros(size(K)),K,U10, ...
-    cfg.inverseWaveAge,cfg.windDirectionDeg);
-
-% Recover S and delta from the two directional cuts. For D(0) and D(pi/2),
-% angular integration of cos^2(phi)D and sin^2(phi)D gives the factors below.
-Ksafe = max(K,realmin);
-sumCuts = PsiAlong+PsiCross;
-S = pi*Ksafe.*sumCuts;
-delta = (PsiAlong-PsiCross)./max(sumCuts,realmin);
-alongIntegrand = k.^2.*S.*(0.5+0.25*delta);
-crossIntegrand = k.^2.*S.*(0.5-0.25*delta);
-along = trapz(k,alongIntegrand);
-crosswind = trapz(k,crossIntegrand);
 end
 
 function [along,crosswind] = guerin_at_winds(U10)

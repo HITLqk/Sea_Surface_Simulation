@@ -1,39 +1,53 @@
-function [Psi,meta] = thesis_elfouhaily_spectrum(K,KX,KY,U10,age,windDirectionDeg)
-%THESIS_ELFOUHAILY_SPECTRUM Unified directional Elfouhaily elevation PSD.
-%   Psi is the two-dimensional elevation spectrum in m^4.
+function [Psi,meta] = thesis_elfouhaily_spectrum( ...
+    K,KX,KY,U10,age,windDirectionDeg,cfg)
+%THESIS_ELFOUHAILY_SPECTRUM Directional elevation PSD Psi(kx,ky), m^4.
+%   S(k)=k^-3[B_l+B_h] [m^3] and Psi=S(k)D(k,phi)/k.
 
-g = 9.81;
-Cd10N = 0.00144;
-km = 370;
-cm = 0.23;
-uStar = sqrt(Cd10N)*U10;
-kp = g*(age/U10)^2;
-cp = sqrt(g/kp);
-sigma = 0.08*(1+4*age^(-3));
-alphaP = 0.006*age^0.55;
-
-if uStar <= cm
-    alphaM = 0.01*(1+log(uStar/cm));
-else
-    alphaM = 0.01*(1+3*log(uStar/cm));
+arguments
+    K double
+    KX double
+    KY double
+    U10 (1,1) double {mustBePositive}
+    age (1,1) double {mustBePositive}
+    windDirectionDeg (1,1) double
+    cfg (1,1) struct = default_thesis_two_group_config()
 end
-% The published equilibrium-range coefficient becomes negative below
-% approximately 2.3 m/s. A negative PSD is inadmissible, so only that
-% short-wave term is set to zero; the event is retained in meta.
-rawAlphaM = alphaM;
-alphaM = max(alphaM,0);
 
-if age <= 1
-    gamma = 1.7;
+g = 9.81;                                    % m/s^2
+km = 370;                                    % rad/m
+cm = 0.23;                                   % m/s
+switch string(cfg.dragCoefficientMode)
+    case "wu"
+        Cd10N = (0.8+0.065*U10)*1e-3;
+    case "fixed_legacy"
+        Cd10N = cfg.legacyDragCoefficient;
+    otherwise
+        error('Unknown dragCoefficientMode: %s',cfg.dragCoefficientMode);
+end
+uStar = sqrt(Cd10N)*U10;                     % m/s
+kp = g*(age/U10)^2;                          % rad/m
+cp = sqrt(g/kp);                             % m/s
+sigma = 0.08*(1+4*age^(-3));
+
+% Elfouhaily et al. (1997), long-wave equilibrium-range level.
+alphaP = 0.006*sqrt(age);
+if uStar <= cm
+    rawAlphaM = 0.01*(1+log(uStar/cm));
 else
-    gamma = 1.7+6*log(age);
+    rawAlphaM = 0.01*(1+3*log(uStar/cm));
+end
+alphaM = max(rawAlphaM,0);                   % a PSD cannot be negative
+if age <= 1
+    gammaPeak = 1.7;
+else
+    gammaPeak = 1.7+6*log(age);
 end
 
 Ksafe = max(K,realmin);
 c = sqrt((g./Ksafe).*(1+(Ksafe/km).^2));
 Lpm = exp(-1.25*(kp./Ksafe).^2);
 Gamma = exp(-0.5*((sqrt(Ksafe/kp)-1)/sigma).^2);
-Jp = gamma.^Gamma;
+Jp = gammaPeak.^Gamma;
 Fp = Lpm.*Jp.*exp(-age/sqrt(10).*(sqrt(Ksafe/kp)-1));
 Fm = Lpm.*Jp.*exp(-0.25*(Ksafe/km-1).^2);
 Bl = 0.5*alphaP*(cp./c).*Fp;
@@ -50,6 +64,10 @@ Psi(K == 0) = 0;
 
 meta.peakWavenumber = kp;
 meta.frictionVelocity = uStar;
+meta.dragCoefficient = Cd10N;
+meta.dragCoefficientMode = string(cfg.dragCoefficientMode);
+meta.alphaLong = alphaP;
 meta.rawShortWaveCoefficient = rawAlphaM;
 meta.shortWaveCoefficient = alphaM;
+meta.shortWaveCoefficientClamped = rawAlphaM < 0;
 end
