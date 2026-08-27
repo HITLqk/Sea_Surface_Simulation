@@ -1,5 +1,22 @@
 # Cox-Munk 验证代码
 
+## 现代观测验证入口
+
+新增的主入口为：
+
+```matlab
+cfg = default_modern_mss_validation_config("guerin");
+run_modern_nonlinear_mss_validation(cfg);
+
+cfg = default_modern_mss_validation_config("davis");
+run_modern_nonlinear_mss_validation(cfg);
+```
+
+`guerin` 模式采用 `3:0.5:15 m/s`、IASI 表 1 分方向 MSS、20 个
+配对随机实现以及散点/箱线图。`davis` 模式只合成并统计
+`k=0.01-1 rad/m`，采用 Davis 2025 高风速参数化。完整说明见
+`README_MODERN_VALIDATION.md`。
+
 ## 四组实际海面验证
 
 按旧 `cox_munk.m` 的单幅曲线图格式运行四组实际表面：

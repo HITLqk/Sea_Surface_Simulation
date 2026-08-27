@@ -11,6 +11,11 @@ cfg.domain.dy = 0.25;
 cfg.sea.U10 = 10.0;
 cfg.sea.inverseWaveAge = 0.84;
 cfg.sea.windDirectionDeg = 0.0;
+% Optional physical synthesis band. The defaults preserve the original
+% full resolved Elfouhaily spectrum. Validation runs can set finite limits
+% to match an instrument's observable wave scales.
+cfg.sea.minimumWavenumber = 0.0;
+cfg.sea.maximumWavenumber = inf;
 
 % Second-order Lie/Creamer-type bound-wave correction. The Elfouhaily
 % spectrum already carries the wind dependence, so the default extra gain
