@@ -1,251 +1,123 @@
-# 卷浪形态与 RCS 验证的文献参照设计
+# 卷浪形态与 RCS 参照文献检索结果
 
-## 1. 核心结论
+## 1. 与本文最相关的文献
 
-卷浪的尺度、前坡、后坡、波峰曲率和不对称程度并不存在一组适用于所有海况的固定真值。它们会随波陡、谱带宽、方向展宽、波龄、破碎类型和破碎阶段变化。因此，本文不应把某一张实验剖面作为唯一模板，也不应因为模型参数可以手动指定，就逐参数把仿真调到与一条参考曲线重合。
+| 文献 | 数据类型 | 直接测量内容 | 可作为本文什么参照 | 数据可得性 |
+|---|---|---|---|---|
+| Schwendeman and Thomson, JPO 2017 | 北太平洋开放海域船载双目观测 | 三维时变海面、103 个破碎波剖面、局部坡度、波速 | 开放海域尺度、前后坡、波峰局部形状、曲率和不对称性的主参照 | 原始图像需申请；三维网格数据和 MATLAB 代码公开 |
+| Erinin et al., JFM 2023 | 深水波槽 plunging breaker | weak/moderate/strong 三类卷浪，各重复 10 次；jet formation 到 impact 的剖面 | 卷唇尺度、前伸/下卷尺度、卷唇面积和阶段形态参照 | 论文、剖面图和补充视频公开 |
+| McAllister et al., Nature 2024 | 三维方向聚焦波实验 | 方向展宽、破碎起始局部坡度、整体谱陡度 | 破碎起始和方向展宽参照，不是破碎后卷浪形态参照 | Zenodo 数据公开 |
+| Bonmarin, JFM 1989 | 深水破碎波实验 | 前坡、后坡、水平/垂直不对称及 plunging crest 演化 | 形态参数定义和破碎阶段变化参照 | 论文可得，未发现结构化开放数据 |
+| Nepf, Wu and Chan, JPO 1998 | 二维/三维聚焦破碎波实验 | crest-front steepness、水平/垂直不对称、方向展宽影响 | 前坡和不对称随三维性的变化参照 | 论文可得 |
+| Tang et al., JTECH 1999 | spilling breaker 激光坡度实验 | 波峰前后局部坡度的高分辨率空间变化 | 前坡、后坡及波峰尖锐程度参照 | 论文可得 |
+| Stringari et al., Scientific Reports 2021 | 黑海现场主动破碎图像 | 破碎面积、长短轴、持续时间、长宽比 | 三维卷浪作用区域的平面尺度参照 | 论文和部分数据/方法公开 |
+| Aggarwal et al., Ocean Engineering 2020 | 经实验验证的近岸 CFD | irregular breakers 的前坡、后坡、水平/垂直不对称分布 | 近岸斜坡工况辅助参照 | 不是开放海域实测真值 |
 
-正确的验证对象是：
+## 2. 按形态指标检索到的参照
 
-```text
-匹配海况和破碎阶段下的无量纲形态分布
-+ 形态参数之间的联合关系
-+ 从弱破碎到强破碎的变化趋势
-+ 形态变化对应的 RCS/Doppler 变化
-```
+### 2.1 卷浪尺度
 
-推荐采用三层参照：
+**首选：Erinin et al. 2023。**
 
-1. `R_onset`：McAllister et al. 2024，验证破碎开始前的局部坡度和方向展宽关系；
-2. `R_profile`：Erinin et al. 2023，验证弱、中、强 plunging breaker 从 jet formation 到 jet impact 的二维卷浪剖面；
-3. `R_planform`：Stringari et al. 2021 的黑海现场统计，验证三维破碎斑块的尺度、面积、长宽比和持续时间。
+该文对 weak、moderate、strong 三种 plunging breaker 给出了：
 
-RCS 阶段再增加：
+| 指标 | weak | moderate | strong |
+|---|---:|---:|---:|
+| jet formation 时 `H/L` | 0.166 | 0.185 | 0.193 |
+| jet impact 时 `H/L` | 0.148 | 0.163 | 0.171 |
+| 卷唇水平尺度 `r_x` | 57.4 mm | 73.5 mm | 81.5 mm |
+| 卷唇垂直尺度 `r_y` | 53.0 mm | 65.0 mm | 69.4 mm |
+| 卷唇下方面积 `Q` | 2222 mm2 | 3457 mm2 | 4134 mm2 |
+| formation 到 impact 时间 | 148.9 ms | 166.8 ms | 169.7 ms |
 
-4. `R_radar`：Sletten et al. 2003 的同步高速光学与 X 波段低擦地角雷达实验，验证不同破碎阶段对应的 RCS 与 Doppler 特征。
+这些数值属于实验波槽尺度。用于本文时应比较 `r_x/lambda`、`r_y/lambda`、`Q/lambda^2` 和 `Delta t/T`，不能直接比较毫米值。
 
-## 2. 为什么不能使用一组固定形态参数
+**开放海域补充：Stringari et al. 2021。**
 
-McAllister et al. 2024 的三维波浪实验表明，破碎起始陡度随方向展宽显著变化，方向展宽最大的工况，其破碎起始陡度可达到单向波的约两倍。该文进一步用方向展宽参数 `Omega_0` 和 `Omega_1` 关联破碎起始时的最大局部坡度和整体谱陡度。这意味着，即使波高相似，不同方向谱也可能产生不同的极限坡度和卷浪形式。
+黑海主动破碎斑块的长短轴比均值约 2.4-2.5、众数约 1.8-1.9，`T_br/T_p` 均值约 0.13。该数据测量的是主动白沫斑块，不是卷唇自由面，只能参照平面长度、宽度、面积和持续时间。
 
-She et al. 1994 也发现，破碎波高、波峰高程、前坡陡度和垂直不对称因子会随方向展宽明显变化，而后坡陡度和水平不对称受影响相对较小。Bonmarin 1989 的深水破碎波实验则表明，卷浪形成过程中的主要变形来自前坡持续增陡，后坡陡度变化相对有限。
+### 2.2 前坡
 
-所以本文要证明的不是“所有卷浪都具有相同曲率或坡度”，而是：
+**Tang et al. 1999：** spilling breaker 波峰前方测得最大局部坡度约 74 deg；坡度先由 0 增至约 44 deg，再在约 4.2 cm 的水平距离内快速增至 74 deg。该文适合验证波峰前方是否出现局部急剧增陡。
 
-```text
-给定波陡、方向展宽和破碎强度后，
-模型生成的形态落在实验分布内，
-并复现实验中参数之间的变化关系。
-```
+**Nepf et al. 1998：** 二维破碎波的 crest-front steepness 约为 0.56；文中同时指出现场观测的极限 crest-front steepness 分布很宽，约 0.32-0.78，说明不能采用单一固定阈值。
 
-## 3. 最推荐的形态主参照：Erinin et al. 2023
+**Erinin et al. 2023：** jet impact 附近卷唇前表面角度在 weak/moderate/strong 三组中约为 65.3、67.6、66.3 deg。
 
-### 3.1 为什么它最适合当前 Curl 模块
+**Schwendeman and Thomson 2017：** 103 个开放海域破碎波显示，真正显著的是波峰附近高度局部化的陡坡，而不是整条 crest-to-trough 的总体陡度。
 
-Erinin et al. 在 JFM 2023 中使用 cinematic laser-induced fluorescence 测量了三种机械生成的深水 plunging breaker，每种强度重复 10 次，并给出了从 jet formation 到 jet impact 的时变自由面剖面、均值和标准差。
+### 2.3 后坡
 
-这与当前 Curl 模块的局部前伸、翻卷和 jet 形态最接近。该文不是只给一张效果图，而是明确区分：
+**Tang et al. 1999：** 在同一 spilling breaker 实验中，后坡最小坡度在演化过程中稳定在约 -30 deg，而前坡变化明显更大。
 
-- weak、moderate、strong 三个破碎强度；
-- jet formation 时刻；
-- jet impact 时刻；
-- 破碎后的随机波动区域。
+**Bonmarin 1989：** 深水破碎波接近破碎时的主要形态变化来自前坡增陡；后坡陡度变化较小，文中报告后坡参数主要位于约 0.20-0.35。
 
-论文表 2 提供了可直接作为参照的量，包括：
+**Nepf et al. 1998：** 二维和三维波在破碎前都形成前后不对称，方向展宽对前坡影响明显，对后坡和水平不对称的影响相对较弱。
 
-| 参数 | weak | moderate | strong | 适合验证什么 |
-|---|---:|---:|---:|---|
-| jet formation 时 `H/L` | 0.166 | 0.185 | 0.193 | 总体波陡随强度增加 |
-| jet impact 时 `H/L` | 0.148 | 0.163 | 0.171 | 撞击阶段总体波形 |
-| 撞击处前表面角度 | 65.3 deg | 67.6 deg | 66.3 deg | 卷唇前坡 |
-| jet 空腔水平尺度 `r_x` | 57.4 mm | 73.5 mm | 81.5 mm | 前伸尺度 |
-| jet 空腔垂直尺度 `r_y` | 53.0 mm | 65.0 mm | 69.4 mm | 下卷尺度 |
-| jet 下方面积 `Q` | 2222 mm2 | 3457 mm2 | 4134 mm2 | 卷浪强度/空腔尺度 |
-| formation 到 impact 时间 | 148.9 ms | 166.8 ms | 169.7 ms | 动态持续时间 |
+因此，后坡不应与前坡使用同一个可调增益，也不应假设强卷浪时前后坡同步等比例增大。
 
-这些绝对数值对应实验水槽尺度，不能直接套到海面仿真中。比较时应使用其名义波长 `lambda_0`、波高 `H` 或周期 `T_0` 无量纲化，例如：
+### 2.4 波峰曲率
 
-```text
-r_x/lambda_0, r_y/lambda_0, Q/lambda_0^2,
-k_p H, k_p r_x, k_p r_y, (t_i-t_f)/T_0
-```
+检索到的实验文献很少给出可直接套用的“真实波峰曲率常数”。主要原因是曲率对空间分辨率、平滑尺度和波峰定位非常敏感，翻卷后自由面又不再是单值函数。
 
-### 3.2 当前 Curl 模块应从中提取的指标
+可用文献如下：
 
-建议把 current Curl 的参数输出转换为以下观测量，而不是直接验证 `forwardGain`、`pivotDepth` 或 `curlMultiplier`：
+- Schwendeman and Thomson 2017 公开了开放海域三维网格海面及 MATLAB 分析代码，可在统一分辨率和平滑尺度下重新计算波峰主曲率/剖面曲率；
+- Erinin et al. 2023 提供 jet formation 到 impact 的高分辨率剖面，可从归一化剖面计算局部曲率；
+- Tang et al. 1999 给出波峰附近坡度的空间急变，可作为曲率变化的间接观测；
+- McAllister et al. 2024 的高密度测波阵列适合局部坡度和破碎起始，不适合作为破碎后卷唇曲率真值。
 
-1. 波高与特征长度之比 `H/L`；
-2. 前坡和后坡的局部最大斜率；
-3. 波峰或卷唇的曲率；
-4. 水平和垂直空腔尺度 `r_x/r_y`；
-5. 卷唇下方封闭或半封闭面积 `Q`；
-6. 从首次垂直切线到最大前伸/撞击状态的无量纲持续时间；
-7. 整条归一化剖面与实验均值剖面的距离。
+结论：曲率应以 Schwendeman 公开三维海面为主数据重新统计，不能引用一个固定文献数值作为所有卷浪的曲率真值。
 
-波面一旦翻卷，就不再能写成单值函数 `z=eta(x)`。因此曲率应在参数曲线上计算：
+### 2.5 不对称程度
 
-```text
-kappa = abs(x' z'' - z' x'') / (x'^2 + z'^2)^(3/2)
-```
+**Bonmarin 1989：** 直接研究 near-breaking profile 的水平和垂直不对称，并发现不对称增长率与 breaker type 有关，plunging breaker 最大、spilling breaker 最小。
 
-并比较无量纲曲率 `kappa/k_p` 或 `kappa*lambda_0`。前坡、后坡和曲率的计算区间也必须以 crest point、jet tip、相邻 trough/zero crossing 等几何特征定义，不能使用随图像范围变化的任意窗口。
+**Nepf et al. 1998：** 二维和三维波均在破碎前产生 front-to-back asymmetry；二维波的不对称和前坡更强，说明方向展宽必须进入不对称参照。
 
-## 4. 三维尺度参照：Stringari/Guimarães 黑海数据
+**Aggarwal et al. 2020：** 对近岸 irregular breakers 统计了 crest-front steepness、crest-rear steepness、horizontal asymmetry 和 vertical asymmetry，并发现这些量适合用 lognormal 分布描述。但该研究是近岸斜坡 CFD，只能作辅助对照，不能作为本文开放海域主真值。
 
-Stringari et al. 2021 使用 Guimarães 已分类的黑海主动破碎事件，统计了破碎持续时间、破碎面积、拟合椭圆的长轴和短轴以及 `Lambda(c)`。主要可用关系包括：
+**Schwendeman and Thomson 2017：** 数据包含三维时变海面，可按同一参数定义重新计算开放海域破碎波的前后不对称分布，是与本文工况最一致的数据源。
 
-- `T_br/T_p` 的均值约 0.13、众数约 0.12；
-- 破碎面积呈重尾/Pareto 型分布，大事件少见；
-- 斑块长短轴比均值约 2.4-2.5、众数约 1.8-1.9；
-- 面积缩放关系与 Duncan 经验量级一致；
-- 破碎斑块面积随事件时间近似二次增长。
+## 3. RCS 参照文献
 
-这组数据适合验证当前三维卷浪在波峰方向上的长度、宽度、投影面积和持续时间，但它识别的是主动白沫/破碎斑块，不是完整自由面翻卷拓扑。因此：
+| 文献 | 雷达与实验 | 可比较的 RCS 信息 |
+|---|---|---|
+| Sletten et al., Radio Science 2003 | 6-12 GHz 双极化 X 波段，约 12 deg 擦地角，约 4 cm 距离分辨率；同步高速光学剖面 | spilling/plunging 各阶段的 HH/VV 回波、能量占比、距离-时间图和 Doppler |
+| Ericson et al., JGR 1999 | X 波段，45 deg 入射，HH/VV，上视/下视 stationary breakers | 破碎波峰附近 `sigma0` 增强和 HH/VV 极化比趋近 1 |
+| Stresser et al., IEEE TGRS 2022 | 岸基相干 X 波段现场 surf-zone 数据 | active/post-breaking 阶段回波约增强 10 dB、Doppler 接近浅水波相速 |
 
-- 可以用它验证 `crestLength`、卷浪作用宽度、投影面积和长宽比的分布；
-- 不能用它直接验证前坡、后坡、波峰曲率或卷唇空腔。
+Sletten et al. 2003 与本文最匹配，因为它把卷浪光学形态和 X 波段回波同步记录下来。该文报告：
 
-这一区分很重要。把白沫斑块面积当成自由面卷唇面积会造成物理含义错位。
+- spilling breaker 初始 crest bulge 贡献超过 90% 的 HH 能量、约 60% 的 VV 能量；
+- plunging breaker 的 jet、impact 和 splash-up 产生更复杂、更宽的 Doppler；
+- 强散射中心的迁移速度与波峰及破碎结构速度有关。
 
-## 5. 破碎起始参照：McAllister et al. 2024
+## 4. 检索结论
 
-McAllister et al. 2024 适合验证“哪些波峰应进入 Curl”，而不是验证卷浪后的完整形态。其开放数据位于 Zenodo，可直接获得实验矩阵和拟合参数。
-
-推荐比较：
-
-- 方向展宽指标 `Omega_0` 或 `Omega_1`；
-- 破碎起始时最大局部坡度 `|grad eta|*`；
-- 破碎起始时整体谱陡度 `S_M*`；
-- breaking/non-breaking 分类。
-
-该文指出二维行进波的局部坡度参考约为 `tan(30 deg)`，随着三维方向展宽增加，起始坡度可向 standing-wave 极限提高。当前 Curl 仅按高度阈值选峰，因此现阶段可以先做形态验证，但不能把选峰结果写成“破碎起始预测准确”。
-
-## 6. 参数可指定时，怎样避免验证变成调参自证
-
-当前 `forwardGain`、`verticalAngleRatio`、`pivotDepth`、`curlMultiplier` 和 `crestLength` 都可指定。如果每个参考样本都单独调整这些参数，直到仿真曲线与它吻合，那么只能证明模型有拟合能力，不能证明它有预测或生成能力。
-
-建议采用下面的规则：
-
-### 6.1 参数与观测量分离
+按本文开放海域卷浪模型，推荐参照优先级为：
 
 ```text
-模型输入参数：forwardGain, pivotDepth, curlMultiplier, crestLength ...
-验证输出参数：H/L, front slope, rear slope, curvature, r_x, r_y, Q ...
+尺度、前后坡、曲率、不对称主数据：Schwendeman and Thomson 2017
+plunging 卷唇局部尺度与阶段剖面：Erinin et al. 2023
+三维方向展宽与破碎起始：McAllister et al. 2024
+局部前/后坡实验数值：Tang et al. 1999、Nepf et al. 1998、Bonmarin 1989
+RCS：Sletten et al. 2003，辅以 Ericson 1999 和 Stresser et al. 2022
 ```
 
-论文只比较输出观测量，不把内部控制参数与实验测量量一一等同。
+## 5. 文献和数据链接
 
-### 6.2 三个强度组，不需要无限工况
-
-设置：
-
-```text
-C1：weak plunging
-C2：moderate plunging
-C3：strong plunging
-```
-
-每组给出一套固定的参数生成规则和多个随机背景海面。参数规则可由波陡或破碎强度变量连续驱动，而不是为每个样本手工指定。
-
-### 6.3 校准与验证分离
-
-可选做法：
-
-- 用 weak 和 strong 两组确定参数映射；
-- 不再调参，预测 moderate 组；
-- 或做 leave-one-strength-out，轮流留出一组验证。
-
-至少应有一个未参与调参的强度组。否则表格中的误差只是拟合误差。
-
-### 6.4 比较联合关系，不只比较单项范围
-
-最有说服力的关系是：
-
-```text
-破碎增强时：H/L 上升，r_x 和 r_y 增大，Q 增大；
-前坡显著增陡，而后坡变化较小；
-卷浪作用面积呈重尾分布，极端大卷浪较少；
-三维长宽比保持在现场观测的主要概率区间。
-```
-
-即使单个参数都落在文献范围内，如果这些变量之间没有正确关联，仍不能说明形态真实。
-
-## 7. 推荐的最小卷浪形态实验
-
-正文只需要一个形态实验，包含三种强度：
-
-```text
-Reference 1：Erinin 2023 weak/moderate/strong 归一化剖面和表 2
-Reference 2：Stringari 2021 现场斑块尺度分布
-G0：相同非线性背景，不施加 Curl
-G1：weak/moderate/strong Curl
-```
-
-建议输出：
-
-1. 一张图：三个强度下的归一化中心剖面，叠加 Erinin 实验均值/误差带；
-2. 一张图：`H/L`、前坡、后坡、曲率、`r_x/r_y`、`Q` 的归一化比较；
-3. 一张图或小表：三维长宽比、投影面积和持续时间与黑海分布比较；
-4. 一个总指标表：profile distance、Wasserstein distance 和趋势是否一致。
-
-不建议在正文中再加入大量互相重复的几何量。核心量可压缩为：
-
-```text
-H/L + front/rear slope ratio + dimensionless crest curvature
-+ r_x/r_y + Q/lambda_p^2 + 3D aspect ratio
-```
-
-## 8. 从形态验证进入 RCS 验证
-
-Sletten et al. 2003 同步测量了 spilling/plunging breaker 的高速光学剖面和低擦地角 X 波段回波，实验波长约 0.8 m，雷达为 6-12 GHz、约 4 cm 距离分辨率、约 12 deg 擦地角。这篇文献适合作为形态到散射的桥梁。
-
-其主要可比规律是：
-
-- spilling breaker 初始 crest bulge 贡献超过 90% 的 HH 回波能量、约 60% 的 VV 能量；
-- plunging breaker 的回波在 jet formation、jet impact、splash-up 和 post-breaking 阶段更复杂；
-- plunging breaker 的 Doppler 展宽明显大于 spilling breaker；
-- 强散射中心的迁移速度与波峰/破碎结构速度相关。
-
-RCS 验证应按阶段组织：
-
-```text
-pre-breaking
--> jet formation
--> maximum overturning / jet impact
--> splash-up / post-breaking
-```
-
-对每个阶段比较：
-
-- 归一化总 RCS 或等效散射面积；
-- HH/VV 极化比；
-- 峰值出现时刻；
-- Doppler centroid 和 bandwidth；
-- 强散射中心相对波峰的空间位置。
-
-如果仿真雷达频率、极化、擦地角和波尺度不能与实验完全对齐，就只能比较归一化阶段规律和趋势，不能直接比较绝对 RCS 数值。绝对 RCS 需要严格复现实验几何，并补充破碎产生的厘米级粗糙度；仅有光滑卷唇几何通常不足以复现全部实测回波。
-
-## 9. 最终建议
-
-当前论文的卷浪形态验证应以 Erinin 2023 为主，以 Stringari/Guimarães 的现场尺度统计为辅，以 McAllister 2024 约束破碎起始。这样既允许模型参数灵活变化，又避免任意调参：模型生成的是一个条件分布，文献提供的是该条件下的实验分布和趋势。
-
-最关键的判据不是“某一条卷浪曲线完全重合”，而是：
-
-```text
-未参与调参的破碎强度下，
-G1 的归一化剖面、形态联合关系和分布
-比 G0 更接近实验参照，
-并使后续 RCS 的阶段变化更接近同步雷达实验。
-```
-
-## 10. 主要文献与数据
-
-1. McAllister, M. L., et al. Three-dimensional wave breaking. Nature 633, 601-607 (2024). https://doi.org/10.1038/s41586-024-07886-z
-2. McAllister 2024 experimental data. Zenodo. https://doi.org/10.5281/zenodo.10818626
-3. Erinin, M. A., Liu, X., Wang, S. D., and Duncan, J. H. Plunging breakers. Part 1. Analysis of an ensemble of wave profiles. Journal of Fluid Mechanics 967, A35 (2023). https://doi.org/10.1017/jfm.2023.379
-4. Stringari, C. E., et al. Deep neural networks for active wave breaking classification. Scientific Reports 11, 3604 (2021). https://doi.org/10.1038/s41598-021-83188-y
-5. Bonmarin, P. Geometric properties of deep-water breaking waves. Journal of Fluid Mechanics 209, 405-433 (1989). https://doi.org/10.1017/S0022112089003162
-6. She, K., Greated, C. A., and Easson, W. J. Experimental study of three-dimensional wave breaking. Journal of Waterway, Port, Coastal, and Ocean Engineering 120, 20-36 (1994). https://doi.org/10.1061/(ASCE)0733-950X(1994)120:1(20)
-7. Sletten, M. A., et al. Radar investigations of breaking water waves at low grazing angles with simultaneous high-speed optical imagery. Radio Science 38 (2003). https://doi.org/10.1029/2002RS002716
-8. Ericson, E. A., et al. Radar backscatter from stationary breaking waves. Journal of Geophysical Research: Oceans 104 (1999). https://doi.org/10.1029/1999JC900223
-9. Stresser, M., Seemann, J., Carrasco, R., et al. On the interpretation of coherent marine radar backscatter from surf zone waves. IEEE Transactions on Geoscience and Remote Sensing 60 (2022). https://doi.org/10.1109/TGRS.2021.3103417
+1. Schwendeman, M. S., and Thomson, J. Sharp-Crested Breaking Surface Waves Observed from a Ship-Based Stereo Video System. Journal of Physical Oceanography 47, 775-792 (2017). https://doi.org/10.1175/JPO-D-16-0187.1
+2. Schwendeman and Thomson 2017 data and MATLAB analysis code. https://digital.lib.washington.edu/researchworks/items/970ce35d-41c7-4e7d-b5eb-6bc6a5cf053a
+3. Erinin, M. A., et al. Plunging breakers. Part 1. Analysis of an ensemble of wave profiles. Journal of Fluid Mechanics 967, A35 (2023). https://doi.org/10.1017/jfm.2023.379
+4. McAllister, M. L., et al. Three-dimensional wave breaking. Nature 633, 601-607 (2024). https://doi.org/10.1038/s41586-024-07886-z
+5. McAllister 2024 data. https://doi.org/10.5281/zenodo.10818626
+6. Bonmarin, P. Geometric properties of deep-water breaking waves. Journal of Fluid Mechanics 209, 405-433 (1989). https://doi.org/10.1017/S0022112089003162
+7. Nepf, H. M., Wu, C. H., and Chan, E. S. A Comparison of Two- and Three-Dimensional Wave Breaking. Journal of Physical Oceanography 28, 1496-1510 (1998). https://doi.org/10.1175/1520-0485(1998)028%3C1496:ACOTAT%3E2.0.CO;2
+8. Tang, S., et al. On Extreme Spatial Variations of Surface Slope for a Spilling Breaking Water Wave. Journal of Atmospheric and Oceanic Technology 16, 92-95 (1999). https://doi.org/10.1175/1520-0426(1999)016%3C0092:OESVOS%3E2.0.CO;2
+9. Stringari, C. E., et al. Deep neural networks for active wave breaking classification. Scientific Reports 11, 3604 (2021). https://doi.org/10.1038/s41598-021-83188-y
+10. Aggarwal, A., et al. Properties of breaking irregular waves over slopes. Ocean Engineering 216, 108098 (2020). https://doi.org/10.1016/j.oceaneng.2020.108098
+11. Sletten, M. A., et al. Radar investigations of breaking water waves at low grazing angles with simultaneous high-speed optical imagery. Radio Science 38 (2003). https://doi.org/10.1029/2002RS002716
+12. Ericson, E. A., et al. Radar backscatter from stationary breaking waves. Journal of Geophysical Research: Oceans 104 (1999). https://doi.org/10.1029/1999JC900223
+13. Stresser, M., et al. On the Interpretation of Coherent Marine Radar Backscatter From Surf Zone Waves. IEEE Transactions on Geoscience and Remote Sensing 60 (2022). https://doi.org/10.1109/TGRS.2021.3103417
 
