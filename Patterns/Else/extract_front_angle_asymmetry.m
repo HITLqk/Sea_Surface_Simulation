@@ -9,14 +9,20 @@ crestSearch = abs(u0) <= ...
     cfg.extraction.crestSearchFractionLambda*lambdaPeak;
 assert(any(crestSearch),'The crest search window is empty.');
 indices = find(crestSearch);
+[~,localCarrierCrest] = max(z0(indices));
+carrierCrestIndex = indices(localCarrierCrest);
 [~,localCrest] = max(z(indices));
 crestIndex = indices(localCrest);
 
 % The generated Elfouhaily field is zero-mean. Estimate the mean water
 % level from the full undeformed surface to avoid local crest-window bias.
 meanWaterLevel = mean(surfaceData.Z0,'all');
-frontCross = first_crossing(z-meanWaterLevel,crestIndex,+1,u);
-rearCross = first_crossing(z-meanWaterLevel,crestIndex,-1,u);
+% Track the carrier-wave zero crossings by their undeformed material
+% indices. A mature plunging jet can cross the mean level before the outer
+% carrier face; treating that jet crossing as the wave boundary grossly
+% overestimates crest-front steepness.
+frontCross = first_crossing(z0-meanWaterLevel,carrierCrestIndex,+1,u);
+rearCross = first_crossing(z0-meanWaterLevel,carrierCrestIndex,-1,u);
 
 crestU = u(crestIndex);
 crestZ = z(crestIndex);
@@ -87,8 +93,14 @@ dx = surfaceData.cfg.domain.Lx/size(surfaceData.X,2);
 dy = surfaceData.cfg.domain.Ly/size(surfaceData.Y,1);
 halfWidth = cfg.extraction.centerlineHalfWidthCells*max(dx,dy);
 selected = abs(surfaceData.localV) <= halfWidth;
-u0 = surfaceData.localU(selected);
-u = surfaceData.localUFinal(selected);
+uRaw = surfaceData.localU(selected);
+uFinalRaw = surfaceData.localUFinal(selected);
+directionMod180 = mod(surfaceData.cfg.curl.propagationDirectionDeg,180);
+assert(min(directionMod180,180-directionMod180) < 1e-12, ...
+    'Periodic center-profile wrapping currently requires a 0 or 180 deg direction.');
+period = surfaceData.cfg.domain.Lx;
+u0 = mod(uRaw+0.5*period,period)-0.5*period;
+u = u0+(uFinalRaw-uRaw);
 z0 = surfaceData.Z0(selected);
 z = surfaceData.Z(selected);
 [u0,order] = sort(u0);

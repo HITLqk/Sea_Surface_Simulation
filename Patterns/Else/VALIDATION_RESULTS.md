@@ -1,33 +1,58 @@
-# Front-angle and Asymmetry Validation Results
+# Conditioned Front-angle and Asymmetry Results
 
 ## Experiment
 
-- Groups: G0 no-breaking, G1 shallow-curl ablation, G2 proposed model.
+- Groups: G0 no-breaking, G1 shallow-curl ablation, G2 conditioned model.
 - Complete paired samples: 100 per group.
-- Attempted seed/parameter pairs: 131.
-- Complete-pair acceptance rate: 76.34%.
-- Every retained pair uses the same random sea seed in G0, G1, and G2.
+- Attempted random seed/parameter pairs: 487.
+- Conditional acceptance rate: 20.53%.
+- Every retained pair uses the same sea seed and selected orientation in all
+  three groups.
+
+The static Elfouhaily height field has no signed phase velocity. For G2, the
+generator evaluates the `0` and `180` deg propagation directions and retains a
+realization only when both requested intervals are satisfied. The G2 result is
+therefore a conditional-generation result, not an unconditional prediction.
 
 ## Results
 
 | Group | Angle median (95% bootstrap CI) | Angle coverage in 65-70 deg | `epsilon_f` median | `epsilon_r` median | `A_fr` median (95% bootstrap CI) | `P(A_fr>1)` |
 |---|---:|---:|---:|---:|---:|---:|
-| G0 No-breaking | 4.57 deg (3.82-5.26) | 0% | 0.0556 | 0.0597 | 0.962 (0.824-1.091) | 46% |
-| G1 Shallow-curl | 3.71 deg (2.50-4.30) | 0% | 0.0576 | 0.0602 | 1.008 (0.855-1.214) | 50% |
-| G2 Proposed | 68.14 deg (67.70-68.54) | 77% | 0.4690 | 0.0796 | 5.814 (5.364-6.652) | 100% |
+| G0 No-breaking | 5.66 deg (5.19-6.37) | 0% | 0.0763 | 0.0369 | 2.085 (2.027-2.185) | 99% |
+| G1 Shallow-curl | 6.08 deg (4.59-7.60) | 0% | 0.0793 | 0.0359 | 2.254 (2.177-2.363) | 100% |
+| G2 Conditioned | 67.55 deg (67.27-68.03) | 100% | 0.0854 | 0.0457 | 1.861 (1.805-1.960) | 100% |
 
-## Interpretation
+## Model correction
 
-The proposed model produces a mature front-face angle consistent with the
-Erinin 65-70 deg envelope. G0 and G1 remain shallow and do not enter that
-range.
+Two validation errors were corrected before parameter conditioning:
 
-The asymmetry result does not pass the auxiliary empirical envelope. G2 has a
-very steep front and a comparatively mild rear slope, giving `A_fr` around
-5.8 rather than 1.6-2.35. This indicates that the current corrected curl
-shortens the front zero-crossing distance too strongly. The model should not
-yet be described as validated for front-rear asymmetry.
+1. The center profile is now periodically wrapped around the detected crest.
+   Without wrapping, crests near the domain edge could have no observable
+   forward zero crossing.
+2. Carrier-wave zero crossings are tracked using undeformed material indices.
+   The plunging jet's own mean-level intersection is not treated as the outer
+   wave boundary.
 
-The 1.6-2.35 interval is a derived auxiliary range, not a universal interval
-directly reported by Bonmarin. It is shown for diagnosis and is not used as a
-hard universal pass criterion.
+The conditioned G2 parameter domain is:
+
+| Parameter | Range |
+|---|---:|
+| `amplitudeCurl` | 0.19-0.23 m |
+| `curlMultiplier` | 1.12-1.20 rad |
+| `pivotDepth` | 0.85-0.98 m |
+| `forwardGain` | 0.98-1.12 |
+| `verticalAngleRatio` | 1.54-1.64 |
+| `propagationDirectionDeg` | selected from 0 or 180 deg |
+
+## Interpretation boundary
+
+All blue G2 points lie inside both displayed intervals by construction. This
+demonstrates that the simulator can generate a requested morphology family and
+quantifies the cost through a 20.53% acceptance rate.
+
+The asymmetry panel does not prove that curling independently creates the
+carrier-wave asymmetry: conditioning also selects G0/G1 carrier waves whose
+`A_fr` values are near the auxiliary interval. The front-angle panel still
+separates G2 clearly from G0 and G1. In a paper, the figure must be described as
+conditional morphology generation, not independent validation against unseen
+experimental data.

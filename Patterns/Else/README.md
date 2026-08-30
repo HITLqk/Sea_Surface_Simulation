@@ -6,7 +6,11 @@ This module performs paired Monte Carlo validation for three groups:
 - G1: the previous shallow-curl parameter domain;
 - G2: the corrected proposed parameter domain.
 
-The driver continues sampling until 100 seeds are valid in all three groups,
+Because a static Elfouhaily height field has no signed phase velocity, G2 is a
+conditional generation group. The driver evaluates the `0` and `180` deg
+orientations and retains a realization only when the requested angle and
+asymmetry intervals are satisfied. It then continues sampling until 100 seeds
+are valid in all three groups,
 so every retained realization is a complete paired comparison. The outputs contain the
 front-face angle, crest-front steepness, crest-rear steepness, and their ratio
 `A_fr = epsilon_f/epsilon_r` for every valid realization.

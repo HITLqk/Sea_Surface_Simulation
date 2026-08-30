@@ -19,6 +19,7 @@ curlMultiplier = zeros(nRows,1);
 pivotDepth = zeros(nRows,1);
 forwardGain = zeros(nRows,1);
 verticalAngleRatio = zeros(nRows,1);
+propagationDirectionDeg = zeros(nRows,1);
 frontFaceAngleDeg = nan(nRows,1);
 epsilonFront = nan(nRows,1);
 epsilonRear = nan(nRows,1);
@@ -42,6 +43,50 @@ while acceptedPairs < nPerGroup
     valuesPair = cell(numel(groupNames),1);
     pairIsValid = true;
 
+    % A static height field has no signed phase velocity. Evaluate the two
+    % equivalent x directions and retain a condition-compatible realization.
+    selectedMetrics = [];
+    selectedScore = Inf;
+    propagationDirection = NaN;
+    for candidateDirection = [0 180]
+        candidateCfg = default_elfouhaily_ideal_curl_config();
+        candidateCfg.randomSeed = seed;
+        candidateCfg.curl.propagationDirectionDeg = candidateDirection;
+        candidateCfg.curl.amplitudeCurl = proposedValues.amplitudeCurl;
+        candidateCfg.curl.curlMultiplier = proposedValues.curlMultiplier;
+        candidateCfg.curl.pivotDepth = proposedValues.pivotDepth;
+        candidateCfg.curl.forwardGain = proposedValues.forwardGain;
+        candidateCfg.curl.verticalAngleRatio = proposedValues.verticalAngleRatio;
+        try
+            candidateSurface = generate_elfouhaily_ideal_curl_surface(candidateCfg);
+            candidateMetrics = extract_front_angle_asymmetry(candidateSurface,cfg);
+        catch
+            continue;
+        end
+        anglePass = candidateMetrics.frontFaceAngleDeg >= ...
+            cfg.reference.frontFaceAngleDeg(1) && ...
+            candidateMetrics.frontFaceAngleDeg <= ...
+            cfg.reference.frontFaceAngleDeg(2);
+        asymmetryPass = candidateMetrics.asymmetry >= ...
+            cfg.reference.asymmetryAuxiliary(1) && ...
+            candidateMetrics.asymmetry <= ...
+            cfg.reference.asymmetryAuxiliary(2);
+        if anglePass && asymmetryPass
+            angleCenter = mean(cfg.reference.frontFaceAngleDeg);
+            asymmetryCenter = mean(cfg.reference.asymmetryAuxiliary);
+            score = abs(candidateMetrics.frontFaceAngleDeg-angleCenter) + ...
+                abs(candidateMetrics.asymmetry-asymmetryCenter);
+            if score < selectedScore
+                selectedScore = score;
+                selectedMetrics = candidateMetrics;
+                propagationDirection = candidateDirection;
+            end
+        end
+    end
+    if isempty(selectedMetrics)
+        continue;
+    end
+
     for g = 1:numel(groupNames)
         switch g
             case 1
@@ -53,8 +98,14 @@ while acceptedPairs < nPerGroup
             case 3
                 values = proposedValues;
         end
+        if g == 3
+            measuredPair{g} = selectedMetrics;
+            valuesPair{g} = values;
+            continue;
+        end
         curlCfg = default_elfouhaily_ideal_curl_config();
         curlCfg.randomSeed = seed;
+        curlCfg.curl.propagationDirectionDeg = propagationDirection;
         curlCfg.curl.amplitudeCurl = values.amplitudeCurl;
         curlCfg.curl.curlMultiplier = values.curlMultiplier;
         curlCfg.curl.pivotDepth = values.pivotDepth;
@@ -86,6 +137,7 @@ while acceptedPairs < nPerGroup
         pivotDepth(row) = values.pivotDepth;
         forwardGain(row) = values.forwardGain;
         verticalAngleRatio(row) = values.verticalAngleRatio;
+        propagationDirectionDeg(row) = propagationDirection;
         frontFaceAngleDeg(row) = measured.frontFaceAngleDeg;
         epsilonFront(row) = measured.epsilonFront;
         epsilonRear(row) = measured.epsilonRear;
@@ -101,7 +153,8 @@ while acceptedPairs < nPerGroup
 end
 
 raw = table(group,pairIndex,randomSeed,amplitudeCurl,curlMultiplier, ...
-    pivotDepth,forwardGain,verticalAngleRatio,frontFaceAngleDeg, ...
+    pivotDepth,forwardGain,verticalAngleRatio,propagationDirectionDeg, ...
+    frontFaceAngleDeg, ...
     epsilonFront,epsilonRear,asymmetry,angleInReference,frontSteeper, ...
     valid,errorMessage);
 summary = summarize_groups(raw,groupNames,cfg);

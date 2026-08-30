@@ -8,7 +8,7 @@ cfg.figureVisible = 'off';
 
 cfg.monteCarlo.randomSeed = 20260902;
 cfg.monteCarlo.nPerGroup = 100;
-cfg.monteCarlo.maximumPairAttempts = 500;
+cfg.monteCarlo.maximumPairAttempts = 600;
 cfg.monteCarlo.bootstrapCount = 2000;
 
 cfg.reference.frontFaceAngleDeg = [65 70];
@@ -21,7 +21,7 @@ cfg.extraction.frontForwardFraction = 0.35;
 cfg.extraction.frontVerticalFraction = [0.15 0.85];
 cfg.extraction.minimumPoints = 3;
 
-cfg.groups.names = ["G0 No-breaking","G1 Shallow-curl","G2 Proposed"];
+cfg.groups.names = ["G0 No-breaking","G1 Shallow-curl","G2 Conditioned"];
 cfg.groups.original = parameter_ranges( ...
     [0.17 0.23],[0.45 0.65],[0.80 1.10],[1.00 1.30],[0.20 0.40]);
 cfg.groups.proposed = parameter_ranges( ...
