@@ -1,0 +1,4 @@
+metric,value,referenceLower,referenceUpper,pass
+front_face_angle_deg,14.1677573410212,65,70,0
+rx_over_lambda,0.0451489197571146,0.049,0.069,0
+ry_over_lambda,0.0023567153470151,0.045,0.059,0
