@@ -16,14 +16,23 @@ Keep `Patterns` and `Curl` as sibling directories, then run:
 
 ```matlab
 run_breaker_morphology_validation
+run_breaker_morphology_monte_carlo
 ```
 
-The script reuses the existing Curl generator without modifying it. Outputs
-are written to `Patterns/output`:
+The script calls the sibling Curl generator. The generator defaults now use
+the center of the Monte Carlo-constrained parameter domain. Outputs are written
+to `Patterns/output`:
 
 - `breaker_morphology_validation.png` and `.pdf`;
 - `breaker_morphology_metrics.csv`;
 - `breaker_morphology_validation.mat`.
+
+The Monte Carlo script compares 100 original-parameter realizations with 100
+corrected-parameter realizations. Each row changes the random sea seed,
+`amplitudeCurl`, `curlMultiplier`, `pivotDepth`, `forwardGain`, and
+`verticalAngleRatio`. It writes raw data, group statistics, and a two-panel
+joint scatter plot. The reference rectangle is not used during sampling or
+metric extraction.
 
 The default normalization uses the Elfouhaily spectral-peak wavelength. To
 compare a measured profile, set `cfg.normalization.mode = 'fixed'` and supply
