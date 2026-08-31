@@ -1,0 +1,5 @@
+Source,Figure,Curve,Chi,Gb_dB,Geometry,Type,Frequency_GHz,Grazing_deg,OriginalQuantity,Notes
+West_2002,TBD,CEM_reference,NaN,NaN,2-D_plunging,numerical_EM,NaN,NaN,original_backscatter,Populate only after digitizing the full paper figure
+Li_West_2006,TBD,MLFMA_reference,NaN,NaN,3-D_plunging,numerical_EM,NaN,NaN,original_scattering,Populate only after digitizing the full paper figure
+Sletten_2003,TBD,measured_reference,NaN,NaN,measured_breaker,experiment,10,12,absolute_RCS_or_relative_echo,Do not treat plunging time-domain echo as absolute RCS
+
