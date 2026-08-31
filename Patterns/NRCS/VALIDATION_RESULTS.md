@@ -73,6 +73,8 @@ Gb_ref(wave) = dominant_path(wave) - median(dominant_path(waves 1:8))
 
 本文模型的中位 `Gb` 为 `5.069 dB`，比文献派生中位数低 `1.031 dB`；模型四分位区间 `[2.312, 6.919] dB` 落在文献阶段范围 `[2.250, 7.850] dB` 内。两者增强量级一致，但后半段趋势并不完全一致。
 
+最终图不再把 LONGTANK wave stage 归一化后与模型 `chi` 共用横坐标。左图只以 `chi` 表示模型连续响应，文献值作为不依赖 `chi` 的水平阶段范围和中位数；右图以 Literature/Present model 两个类别比较增益分布。
+
 必须保留以下边界：Fig. 8(a) 原量是最大图像幅度，`Gb_ref` 是本文为了比较而派生的指标，不是原作者定义的绝对 NRCS 指标。West and Zhao 2002 的“多数条件误差小于 2 dB”只作为数值方法精度基线；Li et al. 2017 的约 2 dB 增量属于整体海面 NRCS，不混入局部卷浪参考曲线。
 
 ## 输出文件
