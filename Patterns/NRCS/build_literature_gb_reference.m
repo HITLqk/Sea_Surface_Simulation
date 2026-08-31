@@ -17,7 +17,7 @@ assert(~isempty(files), ...
 reference = table();
 for i = 1:numel(files)
     file = fullfile(files(i).folder, files(i).name);
-    curve = readtable(file, 'TextType', 'string');
+    curve = readtable(file, 'TextType', 'string', 'Delimiter', ',');
     required = {'Source','Figure','Curve','Chi','Gb_dB'};
     assert(all(ismember(required, curve.Properties.VariableNames)), ...
         'Digitized file lacks required columns: %s', file);
@@ -38,4 +38,3 @@ fprintf('Combined %d reference points from %d digitized curves.\n', ...
     height(reference), numel(files));
 fprintf('  output: %s\n', outputCsv);
 end
-

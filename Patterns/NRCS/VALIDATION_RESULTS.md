@@ -55,34 +55,25 @@ Gb = CurlRcs_dBsm - PreRcs_dBsm
 
 这说明当前几何变换与现有面元 RCS proxy 之间存在清晰、稳定的连续响应，而不是由离散强度组或更换随机海面造成的跳变。
 
-## 文献参考值状态
+## 文献参考值提取与比较
 
-代码已经提供：
+定量参考来自 Kim and Johnson, *IEEE TGRS*, 2002, Fig. 8(a)。只数字化固定 HH 通道，不进行极化比较。每个 LONGTANK wave stage 取 direct、single-bounce 和 double-bounce 三条曲线中的最大图像幅度；waves 1--8 的中位数 `-21.65 dB` 作为破碎前参考，waves 9--16 作为卷浪阶段。
 
-- 论文 figure 坐标轴交互标定；
-- 曲线逐点数字化；
-- 原始散射量到 dB 的转换；
-- 同一文献内部 `Gb_ref = S_ref,dB - S_pre,dB` 的计算；
-- pre-to-mature 阶段归一化 `chi_ref`；
-- West 2002、Li and West 2006 与 Sletten 2003 曲线的合并和叠加绘图。
-
-当前本机没有 West 2002 和 Li and West 2006 的完整曲线图，因此 `literature_gb_reference.csv` 仍是带 `NaN` 的审计模板。程序不会把摘要描述、HH/VV 差值或 Sletten 的 35% 事件能量占比冒充 `Gb_ref`。
-
-因此，本次已经完成的是：
+文献派生指标为：
 
 ```text
-模型内部的 G0/G1 局部配对验证
-+
-Gb(chi) 连续趋势验证
+Gb_ref(wave) = dominant_path(wave) - median(dominant_path(waves 1:8))
 ```
 
-尚未完成的是：
+| 统计量 | 文献数字化结果 |
+|---|---:|
+| Median `Gb_ref` | `6.100 dB` |
+| Range | `[2.250, 7.850] dB` |
+| 读图不确定度 | `+/-1.0 dB` |
 
-```text
-模型 Gb 与文献数字化 Gb_ref 的定量比较
-```
+本文模型的中位 `Gb` 为 `5.069 dB`，比文献派生中位数低 `1.031 dB`；模型四分位区间 `[2.312, 6.919] dB` 落在文献阶段范围 `[2.250, 7.850] dB` 内。两者增强量级一致，但后半段趋势并不完全一致。
 
-只有取得两篇 IEEE 全文目标 figure 并完成数字化后，才能在论文中写“与文献增强量级一致”。
+必须保留以下边界：Fig. 8(a) 原量是最大图像幅度，`Gb_ref` 是本文为了比较而派生的指标，不是原作者定义的绝对 NRCS 指标。West and Zhao 2002 的“多数条件误差小于 2 dB”只作为数值方法精度基线；Li et al. 2017 的约 2 dB 增量属于整体海面 NRCS，不混入局部卷浪参考曲线。
 
 ## 输出文件
 
@@ -91,3 +82,6 @@ Gb(chi) 连续趋势验证
 - `output/local_curl_dual_metric_results.mat`
 - `output/local_curl_dual_metric_validation_final.png`
 - `output/local_curl_dual_metric_validation_final.pdf`
+- `reference/digitized/Kim_Johnson_2002_Fig8a_HH.csv`
+- `reference/literature_gb_reference.csv`
+- `reference/REFERENCE_EXTRACTION_AUDIT.md`

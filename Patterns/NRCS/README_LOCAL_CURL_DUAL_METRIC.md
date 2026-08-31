@@ -47,7 +47,7 @@ generate_elfouhaily_ideal_curl_surface.m
 - `local_curl_dual_metric_raw.csv`：每个配对样本的 `Gb`、`chi` 和几何诊断量；
 - `local_curl_dual_metric_summary.csv`：连续 `chi` 分箱后的中位数和四分位区间；
 - `local_curl_dual_metric_results.mat`：完整 MATLAB 结果；
-- `local_curl_dual_metric_validation_final.png/.pdf`：G0/G1 成对总响应、`Gb(chi)`、代表性中心剖面与传播向局部散射剖面。
+- `local_curl_dual_metric_validation_final.png/.pdf`：文献原曲线提取过程，以及模型 `Gb(chi)` 与文献派生 `Gb_ref` 的两栏对比图。
 
 ## 散射量边界
 
@@ -65,11 +65,18 @@ sigma_i = Area_i * cos(theta_i)^2
 - `Gb` 的蒙特卡洛分布；
 - `Gb` 随连续卷曲控制参数 `chi` 的变化。
 
-当前结果不能声称复现 West 2002 或 Li and West 2006 的全波数值，也不能在没有数字化参考曲线时声称完成文献数值验证。
+当前结果不能声称复现 West 2002 或 Li and West 2006 的全波数值。与 Kim and Johnson 2002 的比较只支持“局部增强量级相近”，不支持“绝对 NRCS 已验证”。
 
 ## 文献参考值提取
 
-完整流程为：
+当前已完成的提取为：
+
+- 原图裁剪：`reference/source_figures/Kim_Johnson_2002_Fig8a_HH.png`；
+- 逐点数据：`reference/digitized/Kim_Johnson_2002_Fig8a_HH.csv`；
+- 主程序参考表：`reference/literature_gb_reference.csv`；
+- 口径和限制：`reference/REFERENCE_EXTRACTION_AUDIT.md`。
+
+新增文献曲线时使用以下流程：
 
 1. 将论文中的目标 figure 保存或裁剪为清晰的 PNG，放入 `reference/figures`；
 2. 复制并填写 `example_digitize_literature_curve.m` 中的坐标范围和 pre/mature stage；

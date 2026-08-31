@@ -1,5 +1,9 @@
-Source,Figure,Curve,Chi,Gb_dB,Geometry,Type,Frequency_GHz,Grazing_deg,OriginalQuantity,Notes
-West_2002,TBD,CEM_reference,NaN,NaN,2-D_plunging,numerical_EM,NaN,NaN,original_backscatter,Populate only after digitizing the full paper figure
-Li_West_2006,TBD,MLFMA_reference,NaN,NaN,3-D_plunging,numerical_EM,NaN,NaN,original_scattering,Populate only after digitizing the full paper figure
-Sletten_2003,TBD,measured_reference,NaN,NaN,measured_breaker,experiment,10,12,absolute_RCS_or_relative_echo,Do not treat plunging time-domain echo as absolute RCS
-
+Source,Figure,Curve,Chi,Gb_dB,Geometry,Type,Frequency_GHz,Grazing_deg,OriginalQuantity,Uncertainty_dB,Notes
+Kim_Johnson_2002_Fig8a_HH,Fig_8a,Dominant_path_relative_to_prebreaking_median,0.125,7.65,2-D_LONGTANK,numerical_EM,10_to_14,10_to_30_grazing,maximum_image_magnitude,1.0,Digitized from fixed HH channel; wave 9 relative to waves 1-8 median
+Kim_Johnson_2002_Fig8a_HH,Fig_8a,Dominant_path_relative_to_prebreaking_median,0.250,6.75,2-D_LONGTANK,numerical_EM,10_to_14,10_to_30_grazing,maximum_image_magnitude,1.0,Digitized from fixed HH channel; wave 10 relative to waves 1-8 median
+Kim_Johnson_2002_Fig8a_HH,Fig_8a,Dominant_path_relative_to_prebreaking_median,0.375,7.85,2-D_LONGTANK,numerical_EM,10_to_14,10_to_30_grazing,maximum_image_magnitude,1.0,Digitized from fixed HH channel; wave 11 relative to waves 1-8 median
+Kim_Johnson_2002_Fig8a_HH,Fig_8a,Dominant_path_relative_to_prebreaking_median,0.500,7.55,2-D_LONGTANK,numerical_EM,10_to_14,10_to_30_grazing,maximum_image_magnitude,1.0,Digitized from fixed HH channel; wave 12 relative to waves 1-8 median
+Kim_Johnson_2002_Fig8a_HH,Fig_8a,Dominant_path_relative_to_prebreaking_median,0.625,4.15,2-D_LONGTANK,numerical_EM,10_to_14,10_to_30_grazing,maximum_image_magnitude,1.0,Digitized from fixed HH channel; wave 13 relative to waves 1-8 median
+Kim_Johnson_2002_Fig8a_HH,Fig_8a,Dominant_path_relative_to_prebreaking_median,0.750,5.45,2-D_LONGTANK,numerical_EM,10_to_14,10_to_30_grazing,maximum_image_magnitude,1.0,Digitized from fixed HH channel; wave 14 relative to waves 1-8 median
+Kim_Johnson_2002_Fig8a_HH,Fig_8a,Dominant_path_relative_to_prebreaking_median,0.875,5.05,2-D_LONGTANK,numerical_EM,10_to_14,10_to_30_grazing,maximum_image_magnitude,1.0,Digitized from fixed HH channel; wave 15 relative to waves 1-8 median
+Kim_Johnson_2002_Fig8a_HH,Fig_8a,Dominant_path_relative_to_prebreaking_median,1.000,2.25,2-D_LONGTANK,numerical_EM,10_to_14,10_to_30_grazing,maximum_image_magnitude,1.0,Digitized from fixed HH channel; wave 16 relative to waves 1-8 median

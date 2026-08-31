@@ -97,7 +97,8 @@ assert(accepted == cfg.sampleCount, ...
 
 summary = summarize_results(raw, cfg);
 reference = load_reference_if_available(cfg.output.referenceCsv);
-fig = plot_results(raw, summary, reference, representative, cfg);
+digitized = load_digitized_reference(cfg.output.referenceCsv);
+fig = plot_results(raw, summary, reference, digitized, cfg);
 
 rawFile = fullfile(cfg.output.directory, 'local_curl_dual_metric_raw.csv');
 summaryFile = fullfile(cfg.output.directory, ...
@@ -120,6 +121,10 @@ fprintf('  median Gb       : %.3f dB\n', median(raw.Gb_dB));
 fprintf('  interquartile Gb: [%.3f, %.3f] dB\n', ...
     percentile(raw.Gb_dB,25), percentile(raw.Gb_dB,75));
 fprintf('  P(Gb > 0)       : %.3f\n', mean(raw.Gb_dB > 0));
+fprintf('  literature Gb   : median %.3f dB, range [%.3f, %.3f] dB\n', ...
+    median(reference.Gb_dB), min(reference.Gb_dB), max(reference.Gb_dB));
+fprintf('  median difference: %.3f dB (model minus literature)\n', ...
+    median(raw.Gb_dB)-median(reference.Gb_dB));
 fprintf('  result directory: %s\n', cfg.output.directory);
 if isempty(reference)
     fprintf(['  literature CSV  : not populated; current figures validate ', ...
@@ -127,7 +132,8 @@ if isempty(reference)
 end
 
 results = struct('raw', raw, 'summary', summary, ...
-    'reference', reference, 'cfg', cfg, 'figure', fig);
+    'reference', reference, 'digitized', digitized, ...
+    'cfg', cfg, 'figure', fig);
 end
 
 function raw = initialize_raw_table(n)
@@ -162,7 +168,7 @@ reference = table();
 if ~exist(csvFile, 'file')
     return
 end
-candidate = readtable(csvFile, 'TextType', 'string');
+candidate = readtable(csvFile, 'TextType', 'string', 'Delimiter', ',');
 required = {'Source','Chi','Gb_dB'};
 if ~all(ismember(required, candidate.Properties.VariableNames))
     warning('Reference CSV is missing Source, Chi, or Gb_dB.');
@@ -172,144 +178,70 @@ valid = isfinite(candidate.Chi) & isfinite(candidate.Gb_dB);
 reference = candidate(valid,:);
 end
 
-function fig = plot_results(raw, summary, reference, representative, cfg)
+function digitized = load_digitized_reference(referenceCsv)
+digitizedFile = fullfile(fileparts(referenceCsv), 'digitized', ...
+    'Kim_Johnson_2002_Fig8a_HH.csv');
+assert(exist(digitizedFile, 'file') == 2, ...
+    'Missing audited digitized reference: %s', digitizedFile);
+digitized = readtable(digitizedFile, 'TextType', 'string', 'Delimiter', ',');
+end
+
+function fig = plot_results(raw, summary, reference, digitized, cfg)
 fig = figure('Visible', cfg.output.figureVisible, 'Color', 'w', ...
-    'Position', [80 80 1240 850]);
-tiledlayout(2,2, 'TileSpacing', 'compact', 'Padding', 'compact');
+    'Position', [80 80 1250 500]);
+tiledlayout(1,2, 'TileSpacing', 'compact', 'Padding', 'compact');
 
 nexttile;
 hold on;
-for i = 1:height(raw)
-    plot([1 2], [raw.PreRcs_dBsm(i),raw.CurlRcs_dBsm(i)], '-', ...
-        'Color', [0.82 0.82 0.82], 'LineWidth', 0.55, ...
-        'HandleVisibility', 'off');
-end
-hG0 = scatter(ones(height(raw),1), raw.PreRcs_dBsm, 23, ...
-    [0.35 0.35 0.35], 'filled', 'MarkerFaceAlpha', 0.55, ...
-    'DisplayName', 'G0 no-curl');
-hG1 = scatter(2*ones(height(raw),1), raw.CurlRcs_dBsm, 26, raw.Chi, ...
-    'filled', 'MarkerFaceAlpha', 0.72, 'DisplayName', 'G1 with-curl');
-medianValues = [median(raw.PreRcs_dBsm), median(raw.CurlRcs_dBsm)];
-q25 = [percentile(raw.PreRcs_dBsm,25), percentile(raw.CurlRcs_dBsm,25)];
-q75 = [percentile(raw.PreRcs_dBsm,75), percentile(raw.CurlRcs_dBsm,75)];
-hMedian = errorbar([1 2], medianValues, medianValues-q25, q75-medianValues, ...
-    'kd', 'LineWidth', 1.6, 'MarkerFaceColor', 'w', ...
-    'DisplayName', 'Median and IQR');
-xlim([0.65 2.35]); xticks([1 2]);
-xticklabels({'G0: no curl','G1: with curl'});
-ylabel('Integrated local RCS proxy (dBsm)');
-title('(a) Strictly Paired Local Response'); grid on;
-cb = colorbar; cb.Label.String = '\chi'; cb.Color = 'k';
-lgd = legend([hG0,hG1,hMedian], 'Location','northwest');
+yl = [-33 -10];
+patch([8.5 16.5 16.5 8.5], [yl(1) yl(1) yl(2) yl(2)], ...
+    [0.94 0.88 0.80], 'EdgeColor', 'none', 'FaceAlpha', 0.55, ...
+    'DisplayName', 'Breaking stages (waves 9-16)');
+hCurve = plot(digitized.Wave, digitized.DominantPath_dB, 'ko-', ...
+    'LineWidth', 1.5, 'MarkerFaceColor', 'w', ...
+    'DisplayName', 'Digitized dominant-path magnitude');
+preReference = median(digitized.DominantPath_dB(1:8));
+hPre = yline(preReference, '--', 'Color', [0.25 0.45 0.68], ...
+    'LineWidth', 1.5, 'DisplayName', ...
+    sprintf('Prebreaking median: %.2f dB', preReference));
+xlim([1 16]); ylim(yl); xticks([1 4 8 9 12 16]);
+xlabel('LONGTANK wave stage');
+ylabel('Maximum image magnitude (dB)');
+title('(a) Literature Reference Extraction'); grid on;
+lgd = legend([hCurve,hPre], 'Location','southeast');
 set(lgd, 'Color', 'w', 'TextColor', 'k', ...
     'EdgeColor', [0.65 0.65 0.65]);
 style_axes(gca);
 
 nexttile;
-scatter(raw.Chi, raw.Gb_dB, 25, [0.22 0.46 0.72], 'filled', ...
+hSamples = scatter(raw.Chi, raw.Gb_dB, 25, [0.22 0.46 0.72], 'filled', ...
     'MarkerFaceAlpha', 0.45, 'DisplayName', 'Model samples'); hold on;
 validBins = summary.Count > 0;
-errorbar(summary.MedianChi(validBins), summary.MedianGb_dB(validBins), ...
+hModel = errorbar(summary.MedianChi(validBins), summary.MedianGb_dB(validBins), ...
     summary.MedianGb_dB(validBins)-summary.Q25Gb_dB(validBins), ...
     summary.Q75Gb_dB(validBins)-summary.MedianGb_dB(validBins), ...
     'ko-', 'LineWidth', 1.5, 'MarkerFaceColor', 'w', ...
     'DisplayName', 'Model median and IQR');
-yline(0, '--', ...
-    'Color', [0.35 0.35 0.35], 'LineWidth', 1.2, ...
-    'DisplayName', 'G0: G_b = 0 dB');
-if ~isempty(reference)
-    sources = unique(reference.Source, 'stable');
-    for i = 1:numel(sources)
-        use = reference.Source == sources(i);
-        plot(reference.Chi(use), reference.Gb_dB(use), '--s', ...
-            'LineWidth', 1.3, 'DisplayName', char(sources(i)));
-    end
-    lgd = legend('show', 'Location','best');
-else
-    lgd = legend('show', 'Location','best');
-    text(0.97, 0.08, 'Literature curve not digitized', ...
-        'Units','normalized', 'HorizontalAlignment','right', ...
-        'Color',[0.55 0.15 0.15], 'FontAngle','italic', ...
-        'FontSize',10);
+assert(~isempty(reference), 'Literature reference table is empty.');
+uncertainty = ones(height(reference),1);
+if ismember('Uncertainty_dB', reference.Properties.VariableNames)
+    uncertainty = reference.Uncertainty_dB;
 end
+hReference = errorbar(reference.Chi, reference.Gb_dB, uncertainty, ...
+    's--', 'Color', [0.74 0.23 0.17], 'LineWidth', 1.5, ...
+    'MarkerFaceColor', [1.0 0.88 0.84], ...
+    'DisplayName', 'Kim and Johnson Fig. 8(a), digitized');
+lgd = legend([hSamples,hModel,hReference], 'Location','southwest');
 set(lgd, 'Color', 'w', 'TextColor', 'k', ...
     'EdgeColor', [0.65 0.65 0.65]);
-xlabel('Continuous morphology control \chi'); ylabel('G_b (dB)');
-title('(b) Enhancement Versus Curl Control'); grid on;
+xlabel('Normalized progression / model control'); ylabel('G_b (dB)');
+title('(b) Model-to-Literature Comparison'); grid on;
 style_axes(gca);
 
-nexttile;
-plot_representative_section(representative, cfg);
-
-nexttile;
-plot_scattering_profile(representative, cfg);
-
-heading = sgtitle(sprintf(['Local curl dual-metric validation | %.1f GHz metadata, ', ...
-    '%.1f deg grazing | fixed facet-RCS proxy'], ...
-    cfg.radar.frequencyGHz, cfg.radar.grazingAngleDeg));
+heading = sgtitle(sprintf(['Local curl scattering validation | ', ...
+    'literature-derived reference and %d paired simulations'], ...
+    height(raw)));
 heading.Color = 'k';
-end
-
-function plot_representative_section(representative, cfg)
-surfaceData = representative.surfaceData;
-stripWidth = 0.55*max(surfaceData.cfg.domain.dx, ...
-    surfaceData.cfg.domain.dy);
-strip = abs(surfaceData.localV) <= stripWidth;
-[uPre, order] = sort(surfaceData.localU(strip));
-zPre = surfaceData.Z0(strip);
-uCurl = surfaceData.localUFinal(strip);
-zCurl = surfaceData.Z(strip);
-
-plot(uPre, zPre(order), '-', 'Color', [0.3 0.3 0.3], ...
-    'LineWidth', 1.3, 'DisplayName', 'G0 no-curl'); hold on;
-plot(uCurl(order), zCurl(order), 'r-', 'LineWidth', 1.8, ...
-    'DisplayName', sprintf('G1 with-curl, \\chi = %.2f', ...
-    representative.chi));
-xlim(0.5*cfg.window.propagationLength*[-1 1]);
-xlabel('Propagation coordinate u (m)'); ylabel('Surface height z (m)');
-title('(c) What Geometry Was Changed'); grid on;
-lgd = legend('show','Location','best');
-set(lgd, 'Color', 'w', 'TextColor', 'k', ...
-    'EdgeColor', [0.65 0.65 0.65]);
-yl = ylim;
-verticalSpan = yl(2)-yl(1);
-quiver(1.25, yl(2)-0.08*verticalSpan, -0.45, 0, 0, ...
-    'Color',[0.1 0.1 0.1], 'LineWidth',1.3, 'MaxHeadSize',0.7, ...
-    'HandleVisibility','off');
-text(1.27, yl(2)-0.08*verticalSpan, 'Radar look', ...
-    'HorizontalAlignment','left', 'VerticalAlignment','middle', ...
-    'Color','k');
-style_axes(gca);
-end
-
-function plot_scattering_profile(representative, cfg)
-u = representative.pair.mapU;
-pre = representative.pair.pre.rcsLinear;
-curl = representative.pair.curl.rcsLinear;
-edges = linspace(-0.5*cfg.window.propagationLength, ...
-    0.5*cfg.window.propagationLength, 65);
-bin = discretize(u, edges);
-valid = ~isnan(bin);
-preSum = accumarray(bin(valid), pre(valid), [numel(edges)-1 1], @sum, 0);
-curlSum = accumarray(bin(valid), curl(valid), [numel(edges)-1 1], @sum, 0);
-centres = 0.5*(edges(1:end-1)+edges(2:end));
-floorValue = max([preSum;curlSum])*1e-8;
-pre_dB = 10*log10(max(preSum,floorValue));
-curl_dB = 10*log10(max(curlSum,floorValue));
-
-plot(centres, pre_dB, '-', 'Color', [0.3 0.3 0.3], ...
-    'LineWidth', 1.4, 'DisplayName', 'G0 no-curl'); hold on;
-plot(centres, curl_dB, 'r-', 'LineWidth', 1.7, ...
-    'DisplayName', 'G1 with-curl');
-xlabel('Propagation coordinate u (m)');
-ylabel('Crestwise-integrated facet RCS proxy (dBsm)');
-title(sprintf('(d) Where the Added Response Occurs, G_b = %.2f dB', ...
-    representative.pair.Gb_dB));
-grid on;
-lgd = legend('show','Location','best');
-set(lgd, 'Color', 'w', 'TextColor', 'k', ...
-    'EdgeColor', [0.65 0.65 0.65]);
-style_axes(gca);
 end
 
 function style_axes(ax)
