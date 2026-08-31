@@ -89,6 +89,5 @@ Gb(chi) 连续趋势验证
 - `output/local_curl_dual_metric_raw.csv`
 - `output/local_curl_dual_metric_summary.csv`
 - `output/local_curl_dual_metric_results.mat`
-- `output/local_curl_dual_metric_validation.png`
-- `output/local_curl_dual_metric_validation.pdf`
-
+- `output/local_curl_dual_metric_validation_final.png`
+- `output/local_curl_dual_metric_validation_final.pdf`

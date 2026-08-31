@@ -103,7 +103,8 @@ rawFile = fullfile(cfg.output.directory, 'local_curl_dual_metric_raw.csv');
 summaryFile = fullfile(cfg.output.directory, ...
     'local_curl_dual_metric_summary.csv');
 matFile = fullfile(cfg.output.directory, 'local_curl_dual_metric_results.mat');
-pngFile = fullfile(cfg.output.directory, 'local_curl_dual_metric_validation.png');
+pngFile = fullfile(cfg.output.directory, ...
+    'local_curl_dual_metric_validation_final.png');
 
 writetable(raw, rawFile);
 writetable(summary, summaryFile);
@@ -111,7 +112,7 @@ save(matFile, 'raw', 'summary', 'reference', 'cfg', 'representative', '-v7.3');
 exportgraphics(fig, pngFile, 'Resolution', 220);
 if cfg.output.savePdf
     exportgraphics(fig, fullfile(cfg.output.directory, ...
-        'local_curl_dual_metric_validation.pdf'), 'ContentType', 'vector');
+        'local_curl_dual_metric_validation_final.pdf'), 'ContentType', 'vector');
 end
 
 fprintf('\nPaired validation complete.\n');
@@ -177,17 +178,31 @@ fig = figure('Visible', cfg.output.figureVisible, 'Color', 'w', ...
 tiledlayout(2,2, 'TileSpacing', 'compact', 'Padding', 'compact');
 
 nexttile;
-scatter(ones(height(raw),1), raw.Gb_dB, 24, raw.Chi, 'filled', ...
-    'MarkerFaceAlpha', 0.65); hold on;
-plot([0.82 1.18], median(raw.Gb_dB)*[1 1], 'k-', 'LineWidth', 2);
-plot([0.88 1.12], percentile(raw.Gb_dB,25)*[1 1], 'k-', 'LineWidth', 1);
-plot([0.88 1.12], percentile(raw.Gb_dB,75)*[1 1], 'k-', 'LineWidth', 1);
-yline(0, '--', 'Color', [0.35 0.35 0.35]);
-xlim([0.6 1.4]); xticks(1); xticklabels({'Paired G1-G0'});
-ylabel('G_b (dB)'); title('Local Paired Enhancement'); grid on;
-cb = colorbar;
-cb.Label.String = '\chi';
-cb.Color = 'k';
+hold on;
+for i = 1:height(raw)
+    plot([1 2], [raw.PreRcs_dBsm(i),raw.CurlRcs_dBsm(i)], '-', ...
+        'Color', [0.82 0.82 0.82], 'LineWidth', 0.55, ...
+        'HandleVisibility', 'off');
+end
+hG0 = scatter(ones(height(raw),1), raw.PreRcs_dBsm, 23, ...
+    [0.35 0.35 0.35], 'filled', 'MarkerFaceAlpha', 0.55, ...
+    'DisplayName', 'G0 no-curl');
+hG1 = scatter(2*ones(height(raw),1), raw.CurlRcs_dBsm, 26, raw.Chi, ...
+    'filled', 'MarkerFaceAlpha', 0.72, 'DisplayName', 'G1 with-curl');
+medianValues = [median(raw.PreRcs_dBsm), median(raw.CurlRcs_dBsm)];
+q25 = [percentile(raw.PreRcs_dBsm,25), percentile(raw.CurlRcs_dBsm,25)];
+q75 = [percentile(raw.PreRcs_dBsm,75), percentile(raw.CurlRcs_dBsm,75)];
+hMedian = errorbar([1 2], medianValues, medianValues-q25, q75-medianValues, ...
+    'kd', 'LineWidth', 1.6, 'MarkerFaceColor', 'w', ...
+    'DisplayName', 'Median and IQR');
+xlim([0.65 2.35]); xticks([1 2]);
+xticklabels({'G0: no curl','G1: with curl'});
+ylabel('Integrated local RCS proxy (dBsm)');
+title('(a) Strictly Paired Local Response'); grid on;
+cb = colorbar; cb.Label.String = '\chi'; cb.Color = 'k';
+lgd = legend([hG0,hG1,hMedian], 'Location','northwest');
+set(lgd, 'Color', 'w', 'TextColor', 'k', ...
+    'EdgeColor', [0.65 0.65 0.65]);
 style_axes(gca);
 
 nexttile;
@@ -199,6 +214,9 @@ errorbar(summary.MedianChi(validBins), summary.MedianGb_dB(validBins), ...
     summary.Q75Gb_dB(validBins)-summary.MedianGb_dB(validBins), ...
     'ko-', 'LineWidth', 1.5, 'MarkerFaceColor', 'w', ...
     'DisplayName', 'Model median and IQR');
+yline(0, '--', ...
+    'Color', [0.35 0.35 0.35], 'LineWidth', 1.2, ...
+    'DisplayName', 'G0: G_b = 0 dB');
 if ~isempty(reference)
     sources = unique(reference.Source, 'stable');
     for i = 1:numel(sources)
@@ -209,30 +227,22 @@ if ~isempty(reference)
     lgd = legend('show', 'Location','best');
 else
     lgd = legend('show', 'Location','best');
+    text(0.97, 0.08, 'Literature curve not digitized', ...
+        'Units','normalized', 'HorizontalAlignment','right', ...
+        'Color',[0.55 0.15 0.15], 'FontAngle','italic', ...
+        'FontSize',10);
 end
 set(lgd, 'Color', 'w', 'TextColor', 'k', ...
     'EdgeColor', [0.65 0.65 0.65]);
-yline(0, '--', 'HandleVisibility', 'off', 'Color', [0.35 0.35 0.35]);
 xlabel('Continuous morphology control \chi'); ylabel('G_b (dB)');
-title('G_b(\chi), No Discrete Strength Groups'); grid on;
+title('(b) Enhancement Versus Curl Control'); grid on;
 style_axes(gca);
 
-preLinear = representative.pair.pre.rcsLinear;
-curlLinear = representative.pair.curl.rcsLinear;
-positiveMap = [preLinear(preLinear > 0); curlLinear(curlLinear > 0)];
-map_dB = 10*log10(positiveMap);
-commonLimits = [percentile(map_dB,2), percentile(map_dB,98)];
-if commonLimits(2) <= commonLimits(1)
-    commonLimits = commonLimits(1)+[-1 1];
-end
 nexttile;
-plot_local_map(representative.pair.mapU, representative.pair.mapV, ...
-    preLinear, commonLimits, 'G0: No curl');
+plot_representative_section(representative, cfg);
 
 nexttile;
-plot_local_map(representative.pair.mapU, representative.pair.mapV, ...
-    curlLinear, commonLimits, ...
-    sprintf('G1: Curl, \\chi = %.2f', representative.chi));
+plot_scattering_profile(representative, cfg);
 
 heading = sgtitle(sprintf(['Local curl dual-metric validation | %.1f GHz metadata, ', ...
     '%.1f deg grazing | fixed facet-RCS proxy'], ...
@@ -240,16 +250,65 @@ heading = sgtitle(sprintf(['Local curl dual-metric validation | %.1f GHz metadat
 heading.Color = 'k';
 end
 
-function plot_local_map(u, v, rcsLinear, commonLimits, plotTitle)
-values = commonLimits(1)*ones(size(rcsLinear));
-positive = rcsLinear > 0;
-values(positive) = 10*log10(rcsLinear(positive));
-scatter(u, v, 7, values, 'filled');
-axis equal tight; grid on;
-cb = colorbar;
-cb.Color = 'k';
-caxis(commonLimits);
-xlabel('u (m)'); ylabel('v (m)'); title(plotTitle);
+function plot_representative_section(representative, cfg)
+surfaceData = representative.surfaceData;
+stripWidth = 0.55*max(surfaceData.cfg.domain.dx, ...
+    surfaceData.cfg.domain.dy);
+strip = abs(surfaceData.localV) <= stripWidth;
+[uPre, order] = sort(surfaceData.localU(strip));
+zPre = surfaceData.Z0(strip);
+uCurl = surfaceData.localUFinal(strip);
+zCurl = surfaceData.Z(strip);
+
+plot(uPre, zPre(order), '-', 'Color', [0.3 0.3 0.3], ...
+    'LineWidth', 1.3, 'DisplayName', 'G0 no-curl'); hold on;
+plot(uCurl(order), zCurl(order), 'r-', 'LineWidth', 1.8, ...
+    'DisplayName', sprintf('G1 with-curl, \\chi = %.2f', ...
+    representative.chi));
+xlim(0.5*cfg.window.propagationLength*[-1 1]);
+xlabel('Propagation coordinate u (m)'); ylabel('Surface height z (m)');
+title('(c) What Geometry Was Changed'); grid on;
+lgd = legend('show','Location','best');
+set(lgd, 'Color', 'w', 'TextColor', 'k', ...
+    'EdgeColor', [0.65 0.65 0.65]);
+yl = ylim;
+verticalSpan = yl(2)-yl(1);
+quiver(1.25, yl(2)-0.08*verticalSpan, -0.45, 0, 0, ...
+    'Color',[0.1 0.1 0.1], 'LineWidth',1.3, 'MaxHeadSize',0.7, ...
+    'HandleVisibility','off');
+text(1.27, yl(2)-0.08*verticalSpan, 'Radar look', ...
+    'HorizontalAlignment','left', 'VerticalAlignment','middle', ...
+    'Color','k');
+style_axes(gca);
+end
+
+function plot_scattering_profile(representative, cfg)
+u = representative.pair.mapU;
+pre = representative.pair.pre.rcsLinear;
+curl = representative.pair.curl.rcsLinear;
+edges = linspace(-0.5*cfg.window.propagationLength, ...
+    0.5*cfg.window.propagationLength, 65);
+bin = discretize(u, edges);
+valid = ~isnan(bin);
+preSum = accumarray(bin(valid), pre(valid), [numel(edges)-1 1], @sum, 0);
+curlSum = accumarray(bin(valid), curl(valid), [numel(edges)-1 1], @sum, 0);
+centres = 0.5*(edges(1:end-1)+edges(2:end));
+floorValue = max([preSum;curlSum])*1e-8;
+pre_dB = 10*log10(max(preSum,floorValue));
+curl_dB = 10*log10(max(curlSum,floorValue));
+
+plot(centres, pre_dB, '-', 'Color', [0.3 0.3 0.3], ...
+    'LineWidth', 1.4, 'DisplayName', 'G0 no-curl'); hold on;
+plot(centres, curl_dB, 'r-', 'LineWidth', 1.7, ...
+    'DisplayName', 'G1 with-curl');
+xlabel('Propagation coordinate u (m)');
+ylabel('Crestwise-integrated facet RCS proxy (dBsm)');
+title(sprintf('(d) Where the Added Response Occurs, G_b = %.2f dB', ...
+    representative.pair.Gb_dB));
+grid on;
+lgd = legend('show','Location','best');
+set(lgd, 'Color', 'w', 'TextColor', 'k', ...
+    'EdgeColor', [0.65 0.65 0.65]);
 style_axes(gca);
 end
 

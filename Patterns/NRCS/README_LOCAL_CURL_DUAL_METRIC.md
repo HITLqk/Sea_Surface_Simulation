@@ -47,7 +47,7 @@ generate_elfouhaily_ideal_curl_surface.m
 - `local_curl_dual_metric_raw.csv`：每个配对样本的 `Gb`、`chi` 和几何诊断量；
 - `local_curl_dual_metric_summary.csv`：连续 `chi` 分箱后的中位数和四分位区间；
 - `local_curl_dual_metric_results.mat`：完整 MATLAB 结果；
-- `local_curl_dual_metric_validation.png/.pdf`：`Gb` 分布、`Gb(chi)` 与代表性局部散射图。
+- `local_curl_dual_metric_validation_final.png/.pdf`：G0/G1 成对总响应、`Gb(chi)`、代表性中心剖面与传播向局部散射剖面。
 
 ## 散射量边界
 
