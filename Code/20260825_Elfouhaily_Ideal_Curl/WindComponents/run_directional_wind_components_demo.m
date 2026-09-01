@@ -66,7 +66,7 @@ xlabel('x (m)'); ylabel('y (m)');
 title('Directional Short-scale Wind-wave Component');
 colormap(turbo); colorbar;
 
-figCombined = new_figure(cfg.output.figureVisible,[140 140 1040 720]);
+figCombined = new_figure(cfg.output.figureVisible,[70 70 1280 820]);
 surf(surfaceData.X,surfaceData.Y,surfaceData.Z, ...
     surfaceData.Z,'EdgeColor','none'); hold on;
 plot3(surfaceData.detection.x,surfaceData.detection.y, ...
@@ -78,10 +78,59 @@ quiver3(surfaceData.detection.x,surfaceData.detection.y, ...
     surfaceData.detection.z+0.15,arrowLength*cos(psi), ...
     arrowLength*sin(psi),0,0,'k','LineWidth',1.8, ...
     'MaxHeadSize',0.8);
-axis tight; pbaspect([1 1 0.22]); view(44,26); grid on;
+shading interp;
+axis tight vis3d; pbaspect([1 1 0.40]); view(42,31); grid on;
+camproj orthographic; camzoom(0.68);
+camlight('headlight'); lighting gouraud; material dull;
+rotate3d on;
 xlabel('x (m)'); ylabel('y (m)'); zlabel('z (m)');
-title('Nonlinear Sea with Directional Short Wind Waves');
-colormap(turbo); clim(commonLimits); colorbar;
+title('Complete Nonlinear Sea with Directional Short Wind Waves');
+colormap(turbo); clim(commonLimits);
+combinedAxes = gca;
+combinedColorbar = colorbar;
+set(combinedAxes,'Position',[0.07 0.10 0.75 0.82]);
+set(combinedColorbar,'Position',[0.87 0.16 0.022 0.70]);
+
+% A full-domain view necessarily compresses the 1.5--5 m wind-wave band.
+% Plot a separate physical 3-D neighborhood so its directional relief and
+% the selected steep crest remain directly inspectable.
+detailHalfWidth = 14;
+xVector = surfaceData.XLinear(1,:);
+yVector = surfaceData.YLinear(:,1);
+detailColumns = find(abs(xVector-surfaceData.detection.parameterX) <= ...
+    detailHalfWidth);
+detailRows = find(abs(yVector-surfaceData.detection.parameterY) <= ...
+    detailHalfWidth);
+detailZ = surfaceData.Z(detailRows,detailColumns);
+detailZLimits = [min(detailZ,[],'all'),max(detailZ,[],'all')];
+detailPadding = max(0.08,0.08*diff(detailZLimits));
+
+figDetail = new_figure(cfg.output.figureVisible,[100 100 1080 760]);
+surf(surfaceData.X(detailRows,detailColumns), ...
+    surfaceData.Y(detailRows,detailColumns),detailZ,detailZ, ...
+    'EdgeColor','none'); hold on;
+plot3(surfaceData.detection.x,surfaceData.detection.y, ...
+    surfaceData.detection.z,'kp','MarkerFaceColor','w', ...
+    'MarkerSize',13,'LineWidth',1.5);
+localArrowLength = 4;
+quiver3(surfaceData.detection.x,surfaceData.detection.y, ...
+    surfaceData.detection.z+detailPadding, ...
+    localArrowLength*cos(psi),localArrowLength*sin(psi),0,0,'k', ...
+    'LineWidth',2.0,'MaxHeadSize',0.9);
+shading interp;
+axis tight vis3d;
+zlim(detailZLimits+[-detailPadding,detailPadding]);
+pbaspect([1 1 0.52]); view(42,30); grid on;
+camproj orthographic; camzoom(0.72);
+camlight('headlight'); lighting gouraud; material dull;
+rotate3d on;
+xlabel('x (m)'); ylabel('y (m)'); zlabel('z (m)');
+title('Local 3-D Detail around Selected Crest');
+colormap(turbo); clim(commonLimits);
+detailAxes = gca;
+detailColorbar = colorbar;
+set(detailAxes,'Position',[0.07 0.10 0.75 0.76]);
+set(detailColorbar,'Position',[0.87 0.16 0.022 0.70]);
 
 % Extract an interpolated section through the selected crest along the
 % requested propagation direction.
@@ -115,8 +164,11 @@ exportgraphics(figComponent,fullfile(cfg.output.outputDirectory, ...
 exportgraphics(figCombined,fullfile(cfg.output.outputDirectory, ...
     '03_combined_wind_component_surface.png'),'Resolution',180, ...
     'BackgroundColor','white');
+exportgraphics(figDetail,fullfile(cfg.output.outputDirectory, ...
+    '04_selected_crest_3d_detail.png'),'Resolution',200, ...
+    'BackgroundColor','white');
 exportgraphics(figSection,fullfile(cfg.output.outputDirectory, ...
-    '04_selected_crest_directional_section.png'),'Resolution',200, ...
+    '05_selected_crest_directional_section.png'),'Resolution',200, ...
     'BackgroundColor','white');
 
 if cfg.output.saveSurfaceMat
