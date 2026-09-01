@@ -19,7 +19,8 @@
 4. 用新分量替换背景中的原频带，避免直接叠加造成能量重复。
 5. 通过对正、负波数分支施加相反的色散相位，定义唯一的正向传播。
 6. 按总高度、顺传播方向负曲率和风生波峰值联合选择局部陡峭波峰。
-7. 分别绘制完整海面 3D 全景和以目标波峰为中心的局部 3D 放大图，避免全域尺度压缩短波起伏。
+7. 将覆盖完整 `128 m x 128 m` 区域的方向短波分量单独绘制为 3D 海面，其 `z` 轴仍使用真实米制高度。
+8. 分别绘制叠加后海面 3D 全景和以目标波峰为中心的局部 3D 放大图。
 
 默认短波波长范围为 `1.5-5.0 m`，角度标准差为 `8 deg`，主传播方向为 `0 deg`。这些尺度在 `0.25 m` 网格上至少有 6 个采样点，避免把未解析的次网格毛刺误当作短波。
 
@@ -27,7 +28,7 @@
 
 - `default_wind_components_config.m`：背景路径、波长带、传播方向和检测参数。
 - `generate_directional_wind_components_surface.m`：频带替换、方向风生波和陡峭波峰检测。
-- `run_directional_wind_components_demo.m`：数值断言、指标、五张独立 Figure 和 MAT 输出。
+- `run_directional_wind_components_demo.m`：数值断言、指标、六张独立 Figure 和 MAT 输出。
 
 ## 运行
 
@@ -35,4 +36,4 @@
 run_directional_wind_components_demo
 ```
 
-结果保存在 `output` 中。其中 `03_combined_wind_component_surface.png` 是完整 3D 海面，`04_selected_crest_3d_detail.png` 是局部短波 3D 细节。`directional_wind_components_surface.mat` 中的 `X,Y,Z,detection` 可直接作为下一阶段局部卷浪构造的输入。
+结果保存在 `output` 中。其中 `03_directional_short_wind_component_3d.png` 是完整大范围短波 3D 海面，`04_combined_wind_component_surface.png` 是叠加后的完整 3D 海面，`05_selected_crest_3d_detail.png` 是局部短波 3D 细节。`directional_wind_components_surface.mat` 中的 `X,Y,Z,detection` 可直接作为下一阶段局部卷浪构造的输入。
