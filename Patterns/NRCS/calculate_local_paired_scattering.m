@@ -20,11 +20,24 @@ curl = facet_rcs_proxy(surfaceData.vertices, localFaces, unitToRadar);
 
 fixedWindowArea = cfg.window.propagationLength*cfg.window.crestwiseLength;
 preRcs = sum(pre.rcsLinear);
-curlRcs = sum(curl.rcsLinear);
+distributedCurlRcs = sum(curl.rcsLinear);
+
+chi = surfaceData.cfg.curl.curlMultiplier/ ...
+    cfg.chi.maximumCurlMultiplier;
+jacobianSeverity = max(0, -surfaceData.metrics.minimumPropagationJacobian);
+breakerActivity = chi*(1 + ...
+    cfg.scattering.jacobianSeverityWeight*jacobianSeverity);
+nonBraggRcs = cfg.scattering.nonBraggPowerCoefficient* ...
+    preRcs*breakerActivity;
+curlRcs = distributedCurlRcs + nonBraggRcs;
 
 pair = struct();
 pair.preRcsLinear = preRcs;
 pair.curlRcsLinear = curlRcs;
+pair.distributedCurlRcsLinear = distributedCurlRcs;
+pair.nonBraggRcsLinear = nonBraggRcs;
+pair.breakerActivity = breakerActivity;
+pair.jacobianSeverity = jacobianSeverity;
 pair.preRcs_dBsm = linear_to_db(preRcs);
 pair.curlRcs_dBsm = linear_to_db(curlRcs);
 pair.Gb_dB = linear_to_db(curlRcs/preRcs);

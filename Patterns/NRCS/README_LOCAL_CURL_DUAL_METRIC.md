@@ -61,17 +61,24 @@ generate_elfouhaily_ideal_curl_surface.m
 - `local_curl_dual_metric_raw.csv`：每个配对样本的 `Gb`、`chi` 和几何诊断量；
 - `local_curl_dual_metric_summary.csv`：连续 `chi` 分箱后的中位数和四分位区间；
 - `local_curl_dual_metric_results.mat`：完整 MATLAB 结果；
-- `local_curl_dual_metric_validation_final.png/.pdf`：模型 `Gb(chi)` 与文献阶段范围，以及 Literature/Present model 两类增益分布的两栏对比图。文献阶段不再映射为模型 `chi`。
+- `local_curl_dual_metric_validation_final.png/.pdf`：模型 `Gb(chi)` 与文献阶段范围，以及 Literature/Calibrated model 两类增益分布的两栏对比图。文献阶段不再映射为模型 `chi`。
 
 ## 散射量边界
 
-当前散射核严格沿用项目现有 `Echo_Caculate.m` 中的面元定义：
+背景散射核沿用项目现有 `Echo_Caculate.m` 中的面元定义：
 
 ```text
 sigma_i = Area_i * cos(theta_i)^2
 ```
 
-它是固定单通道的局部面元 RCS proxy，本实验不进行极化比较。`10 GHz` 仅作为后续替换散射核时的实验条件元数据，当前 proxy 本身不随频率变化。
+单独使用该项时，连续表面的积分响应近似受投影面积约束，更新后的卷浪几何只能产生约 `0.05 dB` 的中位增强。当前模型因此增加固定单通道的半经验非 Bragg 卷浪项：
+
+```text
+sigma_nb / sigma_pre = C_nb * chi * (1 + w_J * max(0,-J_min))
+sigma_G1 = sigma_facet,G1 + sigma_nb
+```
+
+其中 `J_min` 是卷浪区域最小传播向雅可比，负值表示几何翻卷；`C_nb=2.50`、`w_J=1.0`。`C_nb` 使用文献中位增益 `6.10 dB` 标定一次，因此中位数不能再作为独立验证证据；文献范围覆盖率和蒙特卡洛离散性才是后续检查量。本实验不比较极化。`10 GHz` 仍是实验条件元数据。
 
 因此，当前结果能够验证：
 
