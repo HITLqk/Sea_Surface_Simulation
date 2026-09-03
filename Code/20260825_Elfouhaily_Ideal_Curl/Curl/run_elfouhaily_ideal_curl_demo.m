@@ -1,114 +1,166 @@
 clear; close all; clc;
 
 cfg = default_elfouhaily_ideal_curl_config();
-
-% A plunging crest advances along +u before it turns downward. These
-% overrides make that forward component dominant in this demonstration.
-cfg.curl.forwardGain = 1.15;
-cfg.curl.verticalAngleRatio = 0.28;
-cfg.curl.pivotDepth = 0.95;
-cfg.curl.curlMultiplier = 0.55;
 surfaceData = generate_elfouhaily_ideal_curl_surface(cfg);
+
 assert(surfaceData.metrics.overturningPointCount > 0, ...
-    'The selected crest is deformed but does not geometrically curl.');
-assert(surfaceData.metrics.maxOutsideCrestDisplacement < 1e-12, ...
-    'The curl deformation leaks outside the finite crest window.');
-assert(surfaceData.metrics.crestwiseBackgroundStd > 0, ...
-    'The curled patch has collapsed to a crestwise-constant extrusion.');
-assert(surfaceData.metrics.maxForwardDisplacement > ...
-    surfaceData.metrics.maxDownwardDisplacement, ...
-    'The curl is downward-dominant instead of forward-plunging.');
+    'The local patch is deformed but does not geometrically overturn.');
+assert(surfaceData.metrics.maxOutsideDisplacement < 1e-12, ...
+    'The deformation leaks outside the compact transition support.');
+assert(surfaceData.metrics.downwardToLocalHeight < 0.55, ...
+    'The downward displacement is too large for the local wave height.');
+assert(surfaceData.metrics.crestwiseRidgeStd > 0, ...
+    'The detected crest ridge has collapsed to a straight extrusion.');
 
 if ~exist(cfg.output.outputDirectory,'dir')
     mkdir(cfg.output.outputDirectory);
 end
 
-fprintf('2-D Elfouhaily ideal curl generated.\n');
-fprintf('  height threshold         : %.4f m\n', ...
+fprintf('Local curled Elfouhaily surface generated.\n');
+fprintf('  height quantile threshold : %.4f m\n', ...
     surfaceData.detection.heightThreshold);
-fprintf('  selected crest           : (%.3f, %.3f, %.3f) m\n', ...
+fprintf('  slope tolerance           : %.5f\n', ...
+    surfaceData.detection.slopeTolerance);
+fprintf('  curvature threshold       : %.5f 1/m\n', ...
+    surfaceData.detection.curvatureThreshold);
+fprintf('  joint candidates          : %d\n', ...
+    surfaceData.detection.candidateCount);
+fprintf('  selected crest            : (%.3f, %.3f, %.3f) m\n', ...
     surfaceData.detection.x,surfaceData.detection.y, ...
     surfaceData.detection.z);
-fprintf('  above-threshold candidates: %d\n', ...
-    surfaceData.detection.candidateCount);
-fprintf('  curl points              : %d\n', ...
-    surfaceData.metrics.curlPointCount);
-fprintf('  minimum du_final/du      : %.4f\n', ...
-    surfaceData.metrics.minimumPropagationJacobian);
-fprintf('  overturning points       : %d\n', ...
-    surfaceData.metrics.overturningPointCount);
-fprintf('  maximum forward movement : %.4f m\n', ...
+fprintf('  estimated local wave H    : %.4f m\n', ...
+    surfaceData.localWaveHeight);
+fprintf('  adaptive pivot depth      : %.4f m\n', ...
+    surfaceData.pivotDepth);
+fprintf('  maximum forward movement  : %.4f m\n', ...
     surfaceData.metrics.maxForwardDisplacement);
-fprintf('  maximum downward movement: %.4f m\n', ...
-    surfaceData.metrics.maxDownwardDisplacement);
-fprintf('  crestwise background std : %.5f m\n', ...
-    surfaceData.metrics.crestwiseBackgroundStd);
-fprintf('  outside-window movement  : %.3e m\n', ...
-    surfaceData.metrics.maxOutsideCrestDisplacement);
+fprintf('  maximum downward movement : %.4f m (%.3f Hlocal)\n', ...
+    surfaceData.metrics.maxDownwardDisplacement, ...
+    surfaceData.metrics.downwardToLocalHeight);
+fprintf('  minimum du_final/du       : %.4f\n', ...
+    surfaceData.metrics.minimumPropagationJacobian);
+fprintf('  overturning points        : %d\n', ...
+    surfaceData.metrics.overturningPointCount);
 
-figBackground = new_figure(cfg.output.figureVisible,[80 80 1040 720]);
+% Figure 1: the three physical placement conditions and their intersection.
+figConditions = new_figure(cfg.output.figureVisible,[40 40 1280 840]);
+tiledlayout(2,2,'TileSpacing','compact','Padding','compact');
+condition_panel(surfaceData.X0,surfaceData.Y0, ...
+    surfaceData.detection.heightMask,surfaceData, ...
+    sprintf('Height: z_s >= %.3f m', ...
+    surfaceData.detection.heightThreshold));
+condition_panel(surfaceData.X0,surfaceData.Y0, ...
+    surfaceData.detection.slopeMask,surfaceData, ...
+    sprintf('Near crest: |z_u| <= %.3f', ...
+    surfaceData.detection.slopeTolerance));
+condition_panel(surfaceData.X0,surfaceData.Y0, ...
+    surfaceData.detection.curvatureMask,surfaceData, ...
+    sprintf('Sharp crest: z_{uu} <= -%.3f m^{-1}', ...
+    surfaceData.detection.curvatureThreshold));
+nexttile;
+imagesc(surfaceData.X0(1,:),surfaceData.Y0(:,1), ...
+    surfaceData.detection.score);
+set(gca,'YDir','normal'); axis image; hold on;
+contour(surfaceData.X0,surfaceData.Y0, ...
+    surfaceData.detection.candidateMask,[0.5 0.5], ...
+    'w','LineWidth',1.2);
+contour(surfaceData.X0,surfaceData.Y0, ...
+    surfaceData.transitionWeight,[0.02 0.02], ...
+    'Color',[0.1 0.1 0.1],'LineWidth',1.2);
+plot(surfaceData.detection.x,surfaceData.detection.y, ...
+    'rp','MarkerFaceColor','y','MarkerSize',12,'LineWidth',1.2);
+xlabel('x (m)'); ylabel('y (m)');
+title('Joint candidates, selected event, and support');
+colormap(figConditions,turbo); colorbar;
+sgtitle('Breaking-eligible Crest Placement Conditions');
+
+% Figure 2: full background surface and selected local event.
+figBackground = new_figure(cfg.output.figureVisible,[70 70 1080 740]);
 surf(surfaceData.X0,surfaceData.Y0,surfaceData.Z0, ...
-    surfaceData.Z0,'EdgeColor','none');
-hold on;
+    surfaceData.Z0,'EdgeColor','none'); hold on;
 plot3(surfaceData.detection.x,surfaceData.detection.y, ...
     surfaceData.detection.z,'kp','MarkerFaceColor','w', ...
     'MarkerSize',12,'LineWidth',1.4);
-axis tight; pbaspect([1 1 0.28]); view(44,26); grid on;
+axis tight; pbaspect([1 1 0.30]); view(44,27); grid on;
 xlabel('x (m)'); ylabel('y (m)'); zlabel('z (m)');
-title('Elfouhaily Sea and Height-selected Crest');
-colormap(turbo); colorbar;
+title('Elfouhaily Sea and Selected Breaking-eligible Crest');
+colormap(figBackground,turbo); colorbar;
 
-figCurl = new_figure(cfg.output.figureVisible,[110 110 1040 720]);
+% Figure 3: complete curled surface.
+figCurl = new_figure(cfg.output.figureVisible,[100 100 1080 740]);
 surf(surfaceData.X,surfaceData.Y,surfaceData.Z, ...
     surfaceData.Z,'EdgeColor','none');
-axis tight; pbaspect([1 1 0.28]); view(44,26); grid on;
+axis tight; pbaspect([1 1 0.30]); view(44,27); grid on;
 xlabel('x (m)'); ylabel('y (m)'); zlabel('z (m)');
-title('Ideal Curl Applied to the 2-D Elfouhaily Sea');
-colormap(turbo); colorbar;
+title('Localized Curl on the 2-D Elfouhaily Sea');
+colormap(figCurl,turbo); colorbar;
 
+% Figure 4: center material section. The red curve uses deformed u and z,
+% so a fold is visible without forcing the surface back to z=f(x,y).
 strip = abs(surfaceData.localV) <= ...
     0.55*max(cfg.domain.dx,cfg.domain.dy);
 [uBase,order] = sort(surfaceData.localU(strip));
 zBase = surfaceData.Z0(strip);
 uCurl = surfaceData.localUFinal(strip);
 zCurl = surfaceData.Z(strip);
-
-figSection = new_figure(cfg.output.figureVisible,[140 140 920 620]);
+figSection = new_figure(cfg.output.figureVisible,[130 130 1040 650]);
 plot(uBase,zBase(order),'Color',[0.25 0.25 0.25], ...
-    'LineWidth',1.2); hold on;
-plot(uCurl(order),zCurl(order),'r-','LineWidth',1.9);
-xlim([-1.4 1.8]); grid on;
+    'LineWidth',1.3); hold on;
+plot(uCurl(order),zCurl(order),'r-','LineWidth',2.0);
+xlim([-1.35 1.45]); grid on;
 xlabel('Propagation coordinate u (m)'); ylabel('z (m)');
-legend('Elfouhaily background','Ideal-curled surface', ...
+legend('Elfouhaily background','Curled parametric surface', ...
     'Location','best');
-title('Forward-plunging Height-selected Crest Section');
+title('Center Section: Forward Extension with Limited Downward Curl');
 
-figCloseup = new_figure(cfg.output.figureVisible,[170 170 1040 720]);
+% Figure 5: local 3-D geometry with core and overturned vertices marked.
+figCloseup = new_figure(cfg.output.figureVisible,[160 160 1100 760]);
 surf(surfaceData.X,surfaceData.Y,surfaceData.Z, ...
-    surfaceData.Z,'EdgeColor','none');
-patchX = surfaceData.X(surfaceData.curlMask);
-patchY = surfaceData.Y(surfaceData.curlMask);
-patchZ = surfaceData.Z(surfaceData.curlMask);
-xlim([min(patchX)-0.35,max(patchX)+0.35]);
-ylim([min(patchY)-0.35,max(patchY)+0.35]);
-zlim([min(patchZ)-0.06,max(patchZ)+0.06]);
-axis vis3d; view(105,18); grid on;
+    surfaceData.Z,'EdgeColor',[0.22 0.22 0.22], ...
+    'EdgeAlpha',0.16); hold on;
+plot3(surfaceData.X(surfaceData.overturningMask), ...
+    surfaceData.Y(surfaceData.overturningMask), ...
+    surfaceData.Z(surfaceData.overturningMask),'.', ...
+    'Color',[0.02 0.02 0.02],'MarkerSize',12);
+patchMask = surfaceData.transitionWeight > 0.02;
+patchX = surfaceData.X(patchMask);
+patchY = surfaceData.Y(patchMask);
+patchZ = surfaceData.Z(patchMask);
+xlim([min(patchX)-0.30,max(patchX)+0.30]);
+ylim([min(patchY)-0.30,max(patchY)+0.30]);
+zlim([min(patchZ)-0.05,max(patchZ)+0.05]);
+axis vis3d; view(-20,18); grid on;
 xlabel('x (m)'); ylabel('y (m)'); zlabel('z (m)');
-title('Local 3-D Ideal Curl on the Elfouhaily Crest');
-colormap(turbo); colorbar;
+title('Local Parametric Curl; Black Points Mark J_u < 0');
+colormap(figCloseup,turbo); colorbar;
 
+exportgraphics(figConditions,fullfile(cfg.output.outputDirectory, ...
+    '01_breaking_location_conditions.png'),'Resolution',200);
 exportgraphics(figBackground,fullfile(cfg.output.outputDirectory, ...
-    '01_elfouhaily_height_selected_crest.png'),'Resolution',180);
+    '02_elfouhaily_selected_crest.png'),'Resolution',180);
 exportgraphics(figCurl,fullfile(cfg.output.outputDirectory, ...
-    '02_elfouhaily_ideal_curled_surface.png'),'Resolution',180);
+    '03_elfouhaily_local_curled_surface.png'),'Resolution',180);
 exportgraphics(figSection,fullfile(cfg.output.outputDirectory, ...
-    '03_elfouhaily_ideal_curl_section.png'),'Resolution',200);
+    '04_local_curl_center_section.png'),'Resolution',210);
 exportgraphics(figCloseup,fullfile(cfg.output.outputDirectory, ...
-    '04_elfouhaily_ideal_curl_closeup.png'),'Resolution',220);
+    '05_local_curl_closeup.png'),'Resolution',220);
+
+save(fullfile(cfg.output.outputDirectory,'elfouhaily_local_curl.mat'), ...
+    'surfaceData','-v7.3');
+
+function condition_panel(X,Y,mask,surfaceData,panelTitle)
+nexttile;
+imagesc(X(1,:),Y(:,1),mask);
+set(gca,'YDir','normal'); axis image; hold on;
+contour(X,Y,surfaceData.detection.Zsmooth,8, ...
+    'Color',[0.3 0.3 0.3],'LineWidth',0.45);
+plot(surfaceData.detection.x,surfaceData.detection.y, ...
+    'rp','MarkerFaceColor','y','MarkerSize',11,'LineWidth',1.1);
+xlabel('x (m)'); ylabel('y (m)'); title(panelTitle);
+end
 
 function fig = new_figure(visibility,position)
 fig = figure('Visible',visibility,'Color','w','Position',position);
-set(gca,'FontName','Times New Roman','FontSize',12, ...
-    'LineWidth',0.8,'Layer','top');
+set(groot,'defaultAxesFontName','Times New Roman', ...
+    'defaultAxesFontSize',12,'defaultAxesLineWidth',0.8);
 end
-

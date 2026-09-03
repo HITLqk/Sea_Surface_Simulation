@@ -1,8 +1,8 @@
 function surfaceData = generate_elfouhaily_ideal_curl_surface(cfg)
-%GENERATE_ELFOUHAILY_IDEAL_CURL_SURFACE Curl a height-selected 2-D sea crest.
-%   The local (u,z) rotation follows the operation in
-%   Ideal_Curl_Wave_Echo.m. Unlike that script, every crestwise position
-%   keeps its own Elfouhaily elevation and receives a finite smooth weight.
+%GENERATE_ELFOUHAILY_IDEAL_CURL_SURFACE Add a local parametric curl.
+%   The event is placed on a breaking-eligible 2-D Elfouhaily crest using
+%   elevation, propagation-direction slope, and curvature. The original
+%   structured mesh is deformed in both horizontal and vertical position.
 
 arguments
     cfg (1,1) struct = default_elfouhaily_ideal_curl_config()
@@ -12,49 +12,90 @@ rng(cfg.randomSeed, 'twister');
 
 Nx = round(cfg.domain.Lx/cfg.domain.dx);
 Ny = round(cfg.domain.Ly/cfg.domain.dy);
-x = (0:Nx-1)*cfg.domain.Lx/Nx;
-y = (0:Ny-1)*cfg.domain.Ly/Ny;
+dx = cfg.domain.Lx/Nx;
+dy = cfg.domain.Ly/Ny;
+x = (0:Nx-1)*dx;
+y = (0:Ny-1)*dy;
 [X0,Y0] = meshgrid(x,y);
 
 Z0 = synthesize_elfouhaily_surface(Nx,Ny,cfg.domain.Lx, ...
     cfg.domain.Ly,cfg.sea);
-detection = detect_high_crest(X0,Y0,Z0,cfg);
+detection = detect_breaking_eligible_crest(X0,Y0,Z0,cfg,dx,dy);
 
-psi = deg2rad(cfg.curl.propagationDirectionDeg);
+psi = deg2rad(cfg.detection.propagationDirectionDeg);
 u = cos(psi).*(X0-detection.x) + sin(psi).*(Y0-detection.y);
 v = -sin(psi).*(X0-detection.x) + cos(psi).*(Y0-detection.y);
 
-% Forward-plunging ideal-curl operation in a local coordinate system. The
-% horizontal rotation keeps the full curl angle, while the vertical branch
-% uses a smaller angle so that the lip first advances along +u and only
-% then turns mildly downward.
-zPivot = detection.z-cfg.curl.pivotDepth;
-nU = cfg.curl.scaleU.*u;
-nZ = cfg.curl.scaleZ.*(Z0-zPivot);
-curlRate = exp(-abs(nU)/cfg.curl.amplitudeCurl);
-crestWeight = compact_cosine(v/(0.5*cfg.curl.crestLength));
-thetaCurl = cfg.curl.curlMultiplier.*curlRate.*crestWeight;
-thetaVertical = cfg.curl.verticalAngleRatio.*thetaCurl;
+ridge = track_crest_ridge(u,v,Z0,detection,cfg,dx,dy);
+vQuery = min(max(v,ridge.v(1)),ridge.v(end));
+uCenter = interp1(ridge.v,ridge.u,vQuery,'pchip');
+zCrest = interp1(ridge.v,ridge.z,vQuery,'pchip');
+ur = u-uCenter;
 
-rotU = nU.*cos(thetaCurl) + ...
-    cfg.curl.forwardGain.*nZ.*sin(thetaCurl);
-rotZ = -nU.*sin(thetaVertical) + nZ.*cos(thetaVertical);
+localWaveHeight = estimate_local_wave_height(u,v,Z0,detection,cfg,dx,dy);
+pivotDepth = min(max(cfg.curl.pivotDepthFraction*localWaveHeight, ...
+    cfg.curl.minimumPivotDepth),cfg.curl.maximumPivotDepth);
 
-uFinal = rotU;
-Z = zPivot+rotZ;
+a = cfg.curl.crestHalfLength;
+b = cfg.curl.coreHalfWidth;
+Wt = compact_cosine(ur/(b+cfg.curl.transitionWidth)).* ...
+    compact_cosine(v/a);
+Wc = compact_cosine(ur/b).*compact_cosine(v/a);
+
+sigmaRear = cfg.curl.rearSigmaFraction*b;
+sigmaFront = cfg.curl.frontSigmaFraction*b;
+sigma = sigmaFront*ones(size(ur));
+sigma(ur < 0) = sigmaRear;
+sigmaEvolution = cfg.curl.evolutionSigmaFraction* ...
+    (b+cfg.curl.transitionWidth);
+
+crestShape = exp(-0.5*(ur./sigma).^2);
+evolutionShape = exp(-0.5*(ur/sigmaEvolution).^2);
+crestLift = cfg.curl.crestLiftFraction*localWaveHeight;
+evolutionLift = cfg.curl.evolutionLiftFraction*localWaveHeight;
+forwardLean = cfg.curl.forwardLeanFraction*localWaveHeight;
+lipAdvance = cfg.curl.lipAdvanceFraction*localWaveHeight;
+lipShape = exp(-0.5*((ur-cfg.curl.shoulderOffset)/ ...
+    cfg.curl.lipAdvanceWidth).^2);
+
+zPre = Z0 + (crestLift*crestShape + ...
+    evolutionLift*evolutionShape).*Wt;
+uPre = u + forwardLean*evolutionShape.*Wt + ...
+    lipAdvance*lipShape.*Wc;
+
+% Retain the Ideal_Curl_Wave_Echo same-angle rotation, but use a shallow,
+% locally scaled pivot and start the rotation on the approaching shoulder.
+uPivot = uCenter + cfg.curl.shoulderOffset + ...
+    cfg.curl.forwardPivotOffset + cfg.curl.pivotAdvanceFraction* ...
+    lipAdvance.*compact_cosine(v/a);
+zPivot = zCrest-pivotDepth;
+theta = cfg.curl.thetaMax*exp(-0.5*((ur- ...
+    cfg.curl.shoulderOffset)/cfg.curl.rotationWidth).^2).* ...
+    compact_cosine(v/a);
+
+dU = uPre-uPivot;
+dZ = zPre-zPivot;
+uRot = uPivot + dU.*cos(theta) + dZ.*sin(theta);
+zRot = zPivot - dU.*sin(theta) + dZ.*cos(theta);
+lipDrop = cfg.curl.lipDropFraction*localWaveHeight;
+dropCenter = cfg.curl.shoulderOffset+cfg.curl.lipDropOffset;
+dropShape = exp(-0.5*((ur-dropCenter)/cfg.curl.lipDropWidth).^2);
+zRot = zRot-lipDrop*dropShape.*compact_cosine(v/a);
+
+uFinal = uPre + Wt.*(uRot-uPre);
+Z = zPre + Wt.*(zRot-zPre);
 X = detection.x + cos(psi).*uFinal - sin(psi).*v;
 Y = detection.y + sin(psi).*uFinal + cos(psi).*v;
 
-[duFinalDx,duFinalDy] = gradient(uFinal, ...
-    cfg.domain.Lx/Nx,cfg.domain.Ly/Ny);
+[duFinalDx,duFinalDy] = gradient(uFinal,dx,dy);
 propagationJacobian = cos(psi).*duFinalDx + ...
     sin(psi).*duFinalDy;
-overturningMask = crestWeight > 0 & propagationJacobian < 0;
+coreMask = Wc >= cfg.curl.coreMaskThreshold;
+overturningMask = coreMask & propagationJacobian < 0;
+transitionMask = Wt > 0 & ~coreMask;
 
-curlMask = thetaCurl >= ...
-    cfg.curl.maskAngleFraction*cfg.curl.curlMultiplier;
 faces = structured_triangles(Nx,Ny);
-curlFacetMask = any(reshape(curlMask(faces),size(faces)),2);
+curlFacetMask = any(reshape(coreMask(faces),size(faces)),2);
 
 surfaceData = struct();
 surfaceData.X0 = X0;
@@ -65,11 +106,15 @@ surfaceData.Y = Y;
 surfaceData.Z = Z;
 surfaceData.localU = u;
 surfaceData.localV = v;
+surfaceData.localURidge = uCenter;
+surfaceData.localURelative = ur;
 surfaceData.localUFinal = uFinal;
-surfaceData.thetaCurl = thetaCurl;
-surfaceData.thetaVertical = thetaVertical;
-surfaceData.crestWeight = crestWeight;
-surfaceData.curlMask = curlMask;
+surfaceData.zPre = zPre;
+surfaceData.thetaCurl = theta;
+surfaceData.coreWeight = Wc;
+surfaceData.transitionWeight = Wt;
+surfaceData.curlMask = coreMask;
+surfaceData.transitionMask = transitionMask;
 surfaceData.propagationJacobian = propagationJacobian;
 surfaceData.overturningMask = overturningMask;
 surfaceData.faces = faces;
@@ -77,64 +122,181 @@ surfaceData.curlFacetMask = curlFacetMask;
 surfaceData.verticesBaseline = [X0(:),Y0(:),Z0(:)];
 surfaceData.vertices = [X(:),Y(:),Z(:)];
 surfaceData.detection = detection;
+surfaceData.ridge = ridge;
+surfaceData.localWaveHeight = localWaveHeight;
+surfaceData.pivotDepth = pivotDepth;
 surfaceData.cfg = cfg;
-surfaceData.metrics.maxElevationChange = max(abs(Z(:)-Z0(:)));
-surfaceData.metrics.maxHorizontalDisplacement = max(hypot( ...
-    X(:)-X0(:),Y(:)-Y0(:)));
-propagationDisplacement = uFinal-u;
-surfaceData.metrics.maxForwardDisplacement = max( ...
-    propagationDisplacement(curlMask));
-surfaceData.metrics.maxDownwardDisplacement = max( ...
-    Z0(curlMask)-Z(curlMask));
-surfaceData.metrics.curlPointCount = nnz(curlMask);
-surfaceData.metrics.curlProjectedArea = nnz(curlMask)* ...
-    (cfg.domain.Lx/Nx)*(cfg.domain.Ly/Ny);
-surfaceData.metrics.minimumPropagationJacobian = min( ...
-    propagationJacobian(crestWeight > 0));
+
+horizontalDisplacement = hypot(X-X0,Y-Y0);
+forwardDisplacement = uFinal-u;
+downwardDisplacement = Z0-Z;
+surfaceData.metrics.maxElevationChange = max(abs(Z-Z0),[],'all');
+surfaceData.metrics.maxHorizontalDisplacement = ...
+    max(horizontalDisplacement,[],'all');
+surfaceData.metrics.maxForwardDisplacement = ...
+    max(forwardDisplacement(coreMask));
+surfaceData.metrics.maxDownwardDisplacement = ...
+    max(downwardDisplacement(coreMask));
+surfaceData.metrics.downwardToLocalHeight = ...
+    surfaceData.metrics.maxDownwardDisplacement/localWaveHeight;
+surfaceData.metrics.curlPointCount = nnz(coreMask);
+surfaceData.metrics.transitionPointCount = nnz(transitionMask);
+surfaceData.metrics.minimumPropagationJacobian = ...
+    min(propagationJacobian(coreMask));
 surfaceData.metrics.overturningPointCount = nnz(overturningMask);
-outside = crestWeight == 0;
-surfaceData.metrics.maxOutsideCrestDisplacement = max([ ...
+outside = Wt == 0;
+surfaceData.metrics.maxOutsideDisplacement = max([ ...
     abs(X(outside)-X0(outside)); abs(Y(outside)-Y0(outside)); ...
     abs(Z(outside)-Z0(outside))]);
-crestLine = abs(u) <= max(cfg.domain.dx,cfg.domain.dy) & ...
-    crestWeight > 0;
-surfaceData.metrics.crestwiseBackgroundStd = std( ...
-    Z0(crestLine),0,'all');
+surfaceData.metrics.crestwiseRidgeStd = std(ridge.u,0,'all');
 end
 
-function detection = detect_high_crest(X,Y,Z,cfg)
-dx = cfg.domain.Lx/size(X,2);
-dy = cfg.domain.Ly/size(Y,1);
+function detection = detect_breaking_eligible_crest(X,Y,Z,cfg,dx,dy)
 sigmaCells = cfg.detection.smoothingLength/max(0.5*(dx+dy),eps);
 Zsmooth = gaussian_smooth(Z,sigmaCells);
+[zx,zy] = gradient(Zsmooth,dx,dy);
+psi = deg2rad(cfg.detection.propagationDirectionDeg);
+etaU = cos(psi).*zx + sin(psi).*zy;
+[etaUx,etaUy] = gradient(etaU,dx,dy);
+etaUU = cos(psi).*etaUx + sin(psi).*etaUy;
 
-threshold = mean(Zsmooth,'all') + ...
-    cfg.detection.heightSigmaThreshold*std(Zsmooth,0,'all');
+heightThreshold = sample_quantile(Zsmooth,cfg.detection.heightQuantile);
+slopeTolerance = cfg.detection.slopeToleranceFactor*std(etaU,0,'all');
+negativeCurvature = max(-etaUU,0);
+curvatureThreshold = sample_quantile(negativeCurvature( ...
+    negativeCurvature > 0),cfg.detection.curvatureQuantile);
+
 margin = cfg.detection.edgeMargin;
 valid = X >= margin & X <= cfg.domain.Lx-margin & ...
     Y >= margin & Y <= cfg.domain.Ly-margin;
-candidates = valid & Zsmooth >= threshold;
-assert(any(candidates,'all'), ...
-    'No crest exceeds the configured elevation threshold.');
+heightMask = valid & Zsmooth >= heightThreshold;
+slopeMask = valid & abs(etaU) <= slopeTolerance;
+curvatureMask = valid & etaUU <= -curvatureThreshold;
+candidates = heightMask & slopeMask & curvatureMask;
 
-score = Zsmooth;
+if ~any(candidates,'all')
+    curvatureMask = valid & etaUU < 0;
+    candidates = heightMask & slopeMask & curvatureMask;
+end
+assert(any(candidates,'all'), ...
+    'No crest satisfies the elevation, slope, and curvature conditions.');
+
+x = X(1,:);
+y = Y(:,1);
+dForward = cfg.detection.forwardSlopeDistance;
+forwardSlope = interp2(x,y,max(-etaU,0), ...
+    X+dForward*cos(psi),Y+dForward*sin(psi),'linear',0);
+
+heightScore = normalize_positive(Zsmooth-heightThreshold,valid);
+curvatureScore = normalize_positive(negativeCurvature,valid);
+forwardSlopeScore = normalize_positive(forwardSlope,valid);
+score = cfg.detection.heightWeight*heightScore + ...
+    cfg.detection.curvatureWeight*curvatureScore + ...
+    cfg.detection.forwardSlopeWeight*forwardSlopeScore;
 score(~candidates) = -Inf;
 [~,coarseIndex] = max(score(:));
 
 refine = valid & hypot(X-X(coarseIndex),Y-Y(coarseIndex)) <= ...
-    cfg.detection.refineRadius;
+    cfg.detection.refineRadius & etaUU < 0;
 indices = find(refine);
 [~,localIndex] = max(Z(indices));
 index = indices(localIndex);
 
 detection.linearIndex = index;
+detection.coarseIndex = coarseIndex;
 detection.x = X(index);
 detection.y = Y(index);
 detection.z = Z(index);
 detection.smoothedElevation = Zsmooth(index);
-detection.heightThreshold = threshold;
-detection.coarseIndex = coarseIndex;
+detection.heightThreshold = heightThreshold;
+detection.slopeTolerance = slopeTolerance;
+detection.curvatureThreshold = curvatureThreshold;
 detection.candidateCount = nnz(candidates);
+detection.Zsmooth = Zsmooth;
+detection.directionalSlope = etaU;
+detection.directionalCurvature = etaUU;
+detection.forwardSlope = forwardSlope;
+detection.heightMask = heightMask;
+detection.slopeMask = slopeMask;
+detection.curvatureMask = curvatureMask;
+detection.candidateMask = candidates;
+detection.score = score;
+end
+
+function ridge = track_crest_ridge(u,v,Z,detection,cfg,dx,dy)
+a = cfg.curl.crestHalfLength;
+dv = max(dx,dy);
+nodeCount = max(31,2*ceil(a/dv)+1);
+vNodes = linspace(-a,a,nodeCount);
+uNodes = zeros(size(vNodes));
+zNodes = zeros(size(vNodes));
+for k = 1:nodeCount
+    band = abs(v-vNodes(k)) <= 0.75*(vNodes(2)-vNodes(1)) & ...
+        abs(u) <= cfg.curl.ridgeSearchHalfWidth;
+    indices = find(band);
+    if isempty(indices)
+        uNodes(k) = 0;
+        zNodes(k) = detection.z;
+    else
+        ridgeScore = detection.Zsmooth(indices) - ...
+            0.06*abs(u(indices));
+        [~,best] = max(ridgeScore);
+        index = indices(best);
+        uNodes(k) = u(index);
+        zNodes(k) = Z(index);
+    end
+end
+
+window = max(3,2*floor(cfg.curl.ridgeSmoothSamples/2)+1);
+kernel = ones(1,window)/window;
+uNodes = conv(uNodes,kernel,'same');
+zNodes = conv(zNodes,kernel,'same');
+edge = floor(window/2);
+uNodes(1:edge) = uNodes(edge+1);
+uNodes(end-edge+1:end) = uNodes(end-edge);
+zNodes(1:edge) = zNodes(edge+1);
+zNodes(end-edge+1:end) = zNodes(end-edge);
+uNodes = uNodes-interp1(vNodes,uNodes,0,'linear');
+
+ridge.v = vNodes;
+ridge.u = uNodes;
+ridge.z = zNodes;
+end
+
+function Hlocal = estimate_local_wave_height(u,v,Z,detection,cfg,dx,dy)
+strip = abs(v) <= 1.5*max(dx,dy) & ...
+    abs(u) <= cfg.curl.localHeightRadius;
+uLine = u(strip);
+zLine = Z(strip);
+[uLine,order] = sort(uLine);
+zLine = zLine(order);
+guard = 0.25*cfg.curl.coreHalfWidth;
+left = zLine(uLine < -guard);
+right = zLine(uLine > guard);
+if isempty(left) || isempty(right)
+    Hlocal = 0.5*cfg.sea.targetHs;
+else
+    troughLevel = 0.5*(min(left)+min(right));
+    Hlocal = detection.z-troughLevel;
+end
+Hlocal = min(max(Hlocal,0.35*cfg.sea.targetHs), ...
+    1.25*cfg.sea.targetHs);
+end
+
+function values = normalize_positive(values,valid)
+values = max(values,0);
+scale = sample_quantile(values(valid),0.95);
+values = min(values/max(scale,eps),1);
+end
+
+function value = sample_quantile(samples,p)
+samples = sort(samples(isfinite(samples)));
+assert(~isempty(samples),'Cannot calculate a quantile from empty data.');
+position = 1+(numel(samples)-1)*min(max(p,0),1);
+lowerIndex = floor(position);
+upperIndex = ceil(position);
+weight = position-lowerIndex;
+value = (1-weight)*samples(lowerIndex)+weight*samples(upperIndex);
 end
 
 function Z = synthesize_elfouhaily_surface(Nx,Ny,Lx,Ly,sea)
@@ -218,4 +380,3 @@ v01 = sub2ind([Ny,Nx],j(:)+1,i(:));
 v11 = sub2ind([Ny,Nx],j(:)+1,i(:)+1);
 faces = [v00,v10,v11; v00,v11,v01];
 end
-
