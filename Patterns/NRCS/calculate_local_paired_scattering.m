@@ -10,8 +10,8 @@ localFaces = faces(inWindow, :);
 
 assert(~isempty(localFaces), 'The configured local window contains no faces.');
 
-psi = deg2rad(surfaceData.cfg.curl.propagationDirectionDeg + ...
-    cfg.radar.lookAzimuthOffsetDeg);
+propagationDirectionDeg = get_propagation_direction(surfaceData.cfg);
+psi = deg2rad(propagationDirectionDeg + cfg.radar.lookAzimuthOffsetDeg);
 gamma = deg2rad(cfg.radar.grazingAngleDeg);
 unitToRadar = [cos(gamma)*cos(psi), cos(gamma)*sin(psi), sin(gamma)];
 
@@ -38,6 +38,21 @@ pair.pre = pre;
 pair.curl = curl;
 pair.mapU = uFace(inWindow);
 pair.mapV = vFace(inWindow);
+end
+
+function directionDeg = get_propagation_direction(generatorCfg)
+% Support both the current generator interface and older saved surfaces.
+if isfield(generatorCfg, 'detection') && ...
+        isfield(generatorCfg.detection, 'propagationDirectionDeg')
+    directionDeg = generatorCfg.detection.propagationDirectionDeg;
+elseif isfield(generatorCfg, 'curl') && ...
+        isfield(generatorCfg.curl, 'propagationDirectionDeg')
+    directionDeg = generatorCfg.curl.propagationDirectionDeg;
+else
+    error('NRCS:MissingPropagationDirection', ...
+        ['Generator configuration must define detection.', ...
+        'propagationDirectionDeg.']);
+end
 end
 
 function facet = facet_rcs_proxy(vertices, faces, unitToRadar)
@@ -72,4 +87,3 @@ end
 function value = linear_to_db(value)
 value = 10*log10(max(value, realmin('double')));
 end
-

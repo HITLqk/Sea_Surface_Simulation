@@ -23,6 +23,20 @@ Gb = CurlRcs_dBsm - PreRcs_dBsm
 results = run_local_curl_dual_metric_validation();
 ```
 
+### Curl 生成器接口兼容
+
+2026-09-03 版 `Curl` 生成器将传播方向放在：
+
+```text
+cfg.detection.propagationDirectionDeg
+```
+
+旧 NRCS 代码读取的是 `cfg.curl.propagationDirectionDeg`，因此每个种子都会在同一位置报“无法识别的字段名称”，随后被误记为 rejected seed。当前代码优先读取新字段，并兼容旧字段。
+
+新版生成器也不再使用旧的 `curlMultiplier`。当前 NRCS 程序先生成完整卷浪，再对相对于 `verticesBaseline` 的三维位移按 `chi*maximumCurlMultiplier` 连续缩放，并重新计算传播向雅可比和卷浪诊断量。因此不同 `chi` 确实对应不同几何强度。
+
+字段缺失等配置错误现在会立即抛出，不再无意义地尝试全部随机种子。
+
 快速检查可使用：
 
 ```matlab

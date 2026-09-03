@@ -45,13 +45,16 @@ while accepted < cfg.sampleCount && attempt < cfg.maximumAttempts
     generatorCfg.sea.targetHs = cfg.generator.targetHs;
     generatorCfg.detection.heightSigmaThreshold = ...
         cfg.generator.heightSigmaThreshold;
-    generatorCfg.curl.curlMultiplier = ...
-        chi*cfg.chi.maximumCurlMultiplier;
+    curlMultiplier = chi*cfg.chi.maximumCurlMultiplier;
 
     try
         surfaceData = generate_elfouhaily_ideal_curl_surface(generatorCfg);
+        surfaceData = scale_generated_deformation(surfaceData, curlMultiplier);
         pair = calculate_local_paired_scattering(surfaceData, cfg);
     catch exception
+        if is_configuration_error(exception)
+            rethrow(exception);
+        end
         warning('Rejected seed %d: %s', seedDesign(attempt), exception.message);
         continue
     end
@@ -60,7 +63,7 @@ while accepted < cfg.sampleCount && attempt < cfg.maximumAttempts
     raw.Sample(accepted) = accepted;
     raw.Seed(accepted) = seedDesign(attempt);
     raw.Chi(accepted) = chi;
-    raw.CurlMultiplier(accepted) = generatorCfg.curl.curlMultiplier;
+    raw.CurlMultiplier(accepted) = curlMultiplier;
     raw.PreRcs_dBsm(accepted) = pair.preRcs_dBsm;
     raw.CurlRcs_dBsm(accepted) = pair.curlRcs_dBsm;
     raw.Gb_dB(accepted) = pair.Gb_dB;
@@ -98,7 +101,7 @@ assert(accepted == cfg.sampleCount, ...
 summary = summarize_results(raw, cfg);
 reference = load_reference_if_available(cfg.output.referenceCsv);
 digitized = load_digitized_reference(cfg.output.referenceCsv);
-fig = plot_results(raw, summary, reference, digitized, cfg);
+fig = plot_results(raw, summary, reference, cfg);
 
 rawFile = fullfile(cfg.output.directory, 'local_curl_dual_metric_raw.csv');
 summaryFile = fullfile(cfg.output.directory, ...
@@ -147,6 +150,79 @@ raw = table('Size', [n 14], ...
 raw.OverturningPointCount = zeros(n,1);
 end
 
+function surfaceData = scale_generated_deformation(surfaceData, multiplier)
+% The current Curl generator returns one full-strength deformation. Apply
+% the NRCS experiment's continuous control to the complete 3-D displacement.
+assert(isfinite(multiplier) && multiplier >= 0, ...
+    'Curl multiplier must be a finite nonnegative scalar.');
+
+baseline = surfaceData.verticesBaseline;
+fullCurl = surfaceData.vertices;
+surfaceData.vertices = baseline + multiplier*(fullCurl-baseline);
+gridSize = size(surfaceData.Z0);
+surfaceData.X = reshape(surfaceData.vertices(:,1), gridSize);
+surfaceData.Y = reshape(surfaceData.vertices(:,2), gridSize);
+surfaceData.Z = reshape(surfaceData.vertices(:,3), gridSize);
+surfaceData.localUFinal = surfaceData.localU + multiplier* ...
+    (surfaceData.localUFinal-surfaceData.localU);
+surfaceData.zPre = surfaceData.Z0 + multiplier* ...
+    (surfaceData.zPre-surfaceData.Z0);
+surfaceData.cfg.curl.curlMultiplier = multiplier;
+
+dx = surfaceData.cfg.domain.Lx/size(surfaceData.Z0,2);
+dy = surfaceData.cfg.domain.Ly/size(surfaceData.Z0,1);
+directionDeg = get_generator_propagation_direction(surfaceData.cfg);
+psi = deg2rad(directionDeg);
+[duDx,duDy] = gradient(surfaceData.localUFinal,dx,dy);
+jacobian = cos(psi).*duDx + sin(psi).*duDy;
+coreMask = surfaceData.curlMask;
+overturningMask = jacobian < 0 & coreMask;
+surfaceData.propagationJacobian = jacobian;
+surfaceData.overturningMask = overturningMask;
+
+horizontalDisplacement = hypot(surfaceData.X-surfaceData.X0, ...
+    surfaceData.Y-surfaceData.Y0);
+forwardDisplacement = surfaceData.localUFinal-surfaceData.localU;
+downwardDisplacement = surfaceData.Z0-surfaceData.Z;
+surfaceData.metrics.maxElevationChange = ...
+    max(abs(surfaceData.Z-surfaceData.Z0),[],'all');
+surfaceData.metrics.maxUpwardDisplacement = ...
+    max(surfaceData.Z-surfaceData.Z0,[],'all');
+surfaceData.metrics.maxHorizontalDisplacement = ...
+    max(horizontalDisplacement,[],'all');
+surfaceData.metrics.maxForwardDisplacement = ...
+    max(forwardDisplacement(coreMask));
+surfaceData.metrics.maxDownwardDisplacement = ...
+    max(downwardDisplacement(coreMask));
+surfaceData.metrics.minimumPropagationJacobian = min(jacobian(coreMask));
+surfaceData.metrics.overturningPointCount = nnz(overturningMask);
+surfaceData.metrics.forwardOverturningFraction = nnz( ...
+    overturningMask & surfaceData.localURelative > 0)/ ...
+    max(nnz(overturningMask),1);
+surfaceData.metrics.downwardToLocalHeight = ...
+    surfaceData.metrics.maxDownwardDisplacement/surfaceData.localWaveHeight;
+end
+
+function directionDeg = get_generator_propagation_direction(generatorCfg)
+if isfield(generatorCfg, 'detection') && ...
+        isfield(generatorCfg.detection, 'propagationDirectionDeg')
+    directionDeg = generatorCfg.detection.propagationDirectionDeg;
+elseif isfield(generatorCfg, 'curl') && ...
+        isfield(generatorCfg.curl, 'propagationDirectionDeg')
+    directionDeg = generatorCfg.curl.propagationDirectionDeg;
+else
+    error('NRCS:MissingPropagationDirection', ...
+        'Curl generator configuration has no propagation direction field.');
+end
+end
+
+function tf = is_configuration_error(exception)
+tf = strcmp(exception.identifier, 'MATLAB:nonExistentField') || ...
+    startsWith(exception.identifier, 'NRCS:Missing') || ...
+    contains(exception.message, '无法识别的字段名称') || ...
+    contains(exception.message, 'Unrecognized field name');
+end
+
 function summary = summarize_results(raw, cfg)
 edges = linspace(cfg.chi.minimum, cfg.chi.maximum, cfg.chi.binCount+1);
 bin = discretize(raw.Chi, edges);
@@ -186,7 +262,7 @@ assert(exist(digitizedFile, 'file') == 2, ...
 digitized = readtable(digitizedFile, 'TextType', 'string', 'Delimiter', ',');
 end
 
-function fig = plot_results(raw, summary, reference, digitized, cfg)
+function fig = plot_results(raw, summary, reference, cfg)
 fig = figure('Visible', cfg.output.figureVisible, 'Color', 'w', ...
     'Position', [80 80 1250 500]);
 tiledlayout(1,2, 'TileSpacing', 'compact', 'Padding', 'compact');
