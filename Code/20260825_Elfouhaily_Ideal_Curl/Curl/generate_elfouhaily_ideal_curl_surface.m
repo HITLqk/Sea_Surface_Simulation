@@ -33,8 +33,6 @@ zCrest = interp1(ridge.v,ridge.z,vQuery,'pchip');
 ur = u-uCenter;
 
 localWaveHeight = estimate_local_wave_height(u,v,Z0,detection,cfg,dx,dy);
-pivotDepth = min(max(cfg.curl.pivotDepthFraction*localWaveHeight, ...
-    cfg.curl.minimumPivotDepth),cfg.curl.maximumPivotDepth);
 
 a = cfg.curl.crestHalfLength;
 b = cfg.curl.coreHalfWidth;
@@ -54,36 +52,20 @@ evolutionShape = exp(-0.5*(ur/sigmaEvolution).^2);
 crestLift = cfg.curl.crestLiftFraction*localWaveHeight;
 evolutionLift = cfg.curl.evolutionLiftFraction*localWaveHeight;
 forwardLean = cfg.curl.forwardLeanFraction*localWaveHeight;
-lipAdvance = cfg.curl.lipAdvanceFraction*localWaveHeight;
-lipShape = exp(-0.5*((ur-cfg.curl.shoulderOffset)/ ...
-    cfg.curl.lipAdvanceWidth).^2);
 
 zPre = Z0 + (crestLift*crestShape + ...
     evolutionLift*evolutionShape).*Wt;
-uPre = u + forwardLean*evolutionShape.*Wt + ...
-    lipAdvance*lipShape.*Wc;
+crestwiseWeight = compact_cosine(v/a);
+uPre = u + forwardLean*evolutionShape.*Wt;
 
-% Retain the Ideal_Curl_Wave_Echo same-angle rotation, but use a shallow,
-% locally scaled pivot and start the rotation on the approaching shoulder.
-uPivot = uCenter + cfg.curl.shoulderOffset + ...
-    cfg.curl.forwardPivotOffset + cfg.curl.pivotAdvanceFraction* ...
-    lipAdvance.*compact_cosine(v/a);
-zPivot = zCrest-pivotDepth;
-theta = cfg.curl.thetaMax*exp(-0.5*((ur- ...
-    cfg.curl.shoulderOffset)/cfg.curl.rotationWidth).^2).* ...
-    compact_cosine(v/a);
-
-dU = uPre-uPivot;
-dZ = zPre-zPivot;
-uRot = uPivot + dU.*cos(theta) + dZ.*sin(theta);
-zRot = zPivot - dU.*sin(theta) + dZ.*cos(theta);
-lipDrop = cfg.curl.lipDropFraction*localWaveHeight;
-dropCenter = cfg.curl.shoulderOffset+cfg.curl.lipDropOffset;
-dropShape = exp(-0.5*((ur-dropCenter)/cfg.curl.lipDropWidth).^2);
-zRot = zRot-lipDrop*dropShape.*compact_cosine(v/a);
-
-uFinal = uPre + Wt.*(uRot-uPre);
-Z = zPre + Wt.*(zRot-zPre);
+% A plunging breaker is multi-valued in z(u), so its core must be built as
+% a material-parametric curve. The upper branch advances, a half-ellipse
+% turns through the nose, and the lower branch continues forward at depth.
+[uTemplate,zTemplate,profileMask] = plunging_profile(ur,uCenter, ...
+    zCrest,zPre,localWaveHeight,cfg);
+profileWeight = profileMask.*crestwiseWeight;
+uFinal = uPre + profileWeight.*(uTemplate-uPre);
+Z = zPre + profileWeight.*(zTemplate-zPre);
 X = detection.x + cos(psi).*uFinal - sin(psi).*v;
 Y = detection.y + sin(psi).*uFinal + cos(psi).*v;
 
@@ -110,7 +92,7 @@ surfaceData.localURidge = uCenter;
 surfaceData.localURelative = ur;
 surfaceData.localUFinal = uFinal;
 surfaceData.zPre = zPre;
-surfaceData.thetaCurl = theta;
+surfaceData.thetaCurl = zeros(size(Z));
 surfaceData.coreWeight = Wc;
 surfaceData.transitionWeight = Wt;
 surfaceData.curlMask = coreMask;
@@ -124,13 +106,13 @@ surfaceData.vertices = [X(:),Y(:),Z(:)];
 surfaceData.detection = detection;
 surfaceData.ridge = ridge;
 surfaceData.localWaveHeight = localWaveHeight;
-surfaceData.pivotDepth = pivotDepth;
 surfaceData.cfg = cfg;
 
 horizontalDisplacement = hypot(X-X0,Y-Y0);
 forwardDisplacement = uFinal-u;
 downwardDisplacement = Z0-Z;
 surfaceData.metrics.maxElevationChange = max(abs(Z-Z0),[],'all');
+surfaceData.metrics.maxUpwardDisplacement = max(Z-Z0,[],'all');
 surfaceData.metrics.maxHorizontalDisplacement = ...
     max(horizontalDisplacement,[],'all');
 surfaceData.metrics.maxForwardDisplacement = ...
@@ -144,11 +126,64 @@ surfaceData.metrics.transitionPointCount = nnz(transitionMask);
 surfaceData.metrics.minimumPropagationJacobian = ...
     min(propagationJacobian(coreMask));
 surfaceData.metrics.overturningPointCount = nnz(overturningMask);
+surfaceData.metrics.forwardOverturningFraction = nnz( ...
+    overturningMask & ur > 0)/max(nnz(overturningMask),1);
+downwardCore = downwardDisplacement;
+downwardCore(~coreMask) = -Inf;
+[~,lowestIndex] = max(downwardCore,[],'all','linear');
+surfaceData.metrics.lowestLipRelativeU = ur(lowestIndex);
 outside = Wt == 0;
 surfaceData.metrics.maxOutsideDisplacement = max([ ...
     abs(X(outside)-X0(outside)); abs(Y(outside)-Y0(outside)); ...
     abs(Z(outside)-Z0(outside))]);
 surfaceData.metrics.crestwiseRidgeStd = std(ridge.u,0,'all');
+end
+
+function [uTarget,zTarget,mask] = plunging_profile(q,uC,zC,zBackground,H,cfg)
+qRear = cfg.curl.profileRear;
+qTop = cfg.curl.noseStart;
+qBottom = cfg.curl.noseEnd;
+qEnd = cfg.curl.lowerEnd;
+
+uTarget = uC+q;
+zTarget = zBackground;
+mask = zeros(size(q));
+
+upper = q >= qRear & q < qTop;
+tUpper = smoothstep((q(upper)-qRear)/(qTop-qRear));
+advance = cfg.curl.upperAdvanceFraction*H;
+zLipTop = zC-cfg.curl.lipTopDropFraction*H;
+uTarget(upper) = uC(upper)+q(upper)+advance.*tUpper;
+zTarget(upper) = zTarget(upper)+(zLipTop(upper)-zTarget(upper)).* ...
+    cfg.curl.plateauFraction.*tUpper;
+mask(upper) = smoothstep((q(upper)-qRear)/(0.18*(qTop-qRear)));
+
+uNoseBase = uC+qTop+advance;
+zTop = zLipTop;
+zBottom = zC-cfg.curl.lowerBranchDropFraction*H;
+nose = q >= qTop & q <= qBottom;
+tNose = (q(nose)-qTop)/(qBottom-qTop);
+uTarget(nose) = uNoseBase(nose)+ ...
+    cfg.curl.noseRadiusFraction*H.*sin(pi*tNose);
+zTarget(nose) = zBottom(nose)+0.5.*(zTop(nose)-zBottom(nose)).* ...
+    (1+cos(pi*tNose));
+mask(nose) = 1;
+
+lower = q > qBottom & q <= qEnd;
+tLower = (q(lower)-qBottom)/(qEnd-qBottom);
+uTarget(lower) = uNoseBase(lower)+ ...
+    cfg.curl.lowerAdvanceFactor*(q(lower)-qBottom);
+zBackgroundJoin = zBackground(lower);
+blendUp = smoothstep(tLower);
+zTarget(lower) = (1-blendUp).*zBottom(lower)+ ...
+    blendUp.*zBackgroundJoin;
+mask(lower) = 1-smoothstep(max((tLower-0.72)/0.28,0));
+
+end
+
+function y = smoothstep(x)
+x = min(max(x,0),1);
+y = x.^2.*(3-2*x);
 end
 
 function detection = detect_breaking_eligible_crest(X,Y,Z,cfg,dx,dy)
